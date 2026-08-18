@@ -1,0 +1,355 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stink Shrimp - title layout</title>
+<style>
+  html, body {
+    margin: 0; padding: 24px 16px 40px; background: #14141a; color: #fff;
+    font: 500 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  h1 { font-size: 17px; letter-spacing: .06em; margin: 0 0 4px; text-transform: uppercase; }
+  .hint { color: #9aa; margin: 0 0 18px; font-size: 13px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  #stage {
+    position: relative; width: 844px; height: 390px; max-width: 100%;
+    margin: 0 auto; box-shadow: 0 0 0 2px #333; touch-action: none;
+  }
+  #c { display: block; width: 844px; height: 390px; max-width: 100%; cursor: grab; }
+  #c.dragging { cursor: grabbing; }
+  .panel {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 14px; margin: 18px auto 0; max-width: 844px;
+  }
+  .card { background: #1e1e27; border: 1px solid #333; border-radius: 10px; padding: 13px 15px; }
+  .card h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 10px; color: #cbd; }
+  .row { display: flex; align-items: center; gap: 9px; margin: 7px 0; }
+  .row label { width: 42px; color: #9aa; font-size: 12px; }
+  input[type=range] { flex: 1; accent-color: #CD66FF; }
+  .val { width: 54px; text-align: right; font-variant-numeric: tabular-nums;
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .out {
+    margin: 16px auto 0; max-width: 844px; background: #0f0f14; border: 1px solid #333;
+    border-radius: 10px; padding: 14px 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px; line-height: 1.7; white-space: pre; overflow-x: auto;
+    -webkit-user-select: text; user-select: text; color: #b8f5c0;
+  }
+  .toolbar { display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; margin-top: 14px; }
+  button {
+    font: 600 13px/1 inherit; padding: 9px 15px; border-radius: 7px;
+    border: 1px solid #444; background: #26262f; color: #eee; cursor: pointer;
+  }
+  button:hover { background: #32323d; }
+  button.on { background: #CD66FF; color: #111; border-color: #CD66FF; }
+  .note { color: #778; font-size: 12px; text-align: center; margin-top: 10px; }
+</style>
+
+<div class="wrap">
+  <h1>Title layout</h1>
+  <p class="hint">Drag the shrimp and the frog. Sliders resize them. The numbers at the
+     bottom are what I need &mdash; paste them back to me and I'll put them in the game.</p>
+
+  <div id="stage"><canvas id="c"></canvas></div>
+
+  <div class="toolbar">
+    <button id="freeze">Freeze scenery</button>
+    <button id="guides" class="on">Guides</button>
+    <button id="weeds" class="on">Weeds in front</button>
+    <button id="reset">Reset to current game values</button>
+    <button id="copy">Copy numbers</button>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <h2>Shrimp</h2>
+      <div class="row"><label>X</label><input type="range" id="sx" min="0" max="844" step="1"><span class="val" id="sxv"></span></div>
+      <div class="row"><label>Y</label><input type="range" id="sy" min="0" max="390" step="1"><span class="val" id="syv"></span></div>
+      <div class="row"><label>Scale</label><input type="range" id="ss" min="0.4" max="2.2" step="0.01"><span class="val" id="ssv"></span></div>
+    </div>
+    <div class="card">
+      <h2>Frog</h2>
+      <div class="row"><label>X</label><input type="range" id="fx" min="0" max="844" step="1"><span class="val" id="fxv"></span></div>
+      <div class="row"><label>Y</label><input type="range" id="fy" min="0" max="390" step="1"><span class="val" id="fyv"></span></div>
+      <div class="row"><label>Scale</label><input type="range" id="fs" min="0.4" max="2.2" step="0.01"><span class="val" id="fsv"></span></div>
+    </div>
+  </div>
+
+  <div class="out" id="out">loading…</div>
+  <p class="note">The dashed line is the base of the title text, for lining up his eyes.
+     Eye-top readout updates as you drag.</p>
+</div>
+
+<script>
+"use strict";
+
+var LOGICAL_W = 844, LOGICAL_H = 390, PIXEL_SCALE = 2;
+var TITLE_Y = 96, TITLE_SIZE = 62;
+
+/* current values in the game - the reset target */
+var DEFAULTS = {
+  shrimp: { x: 247, y: 211, scale: 1.15 },
+  frog:   { x: 624, y: 223, scale: 0.95 }
+};
+var pos = JSON.parse(JSON.stringify(DEFAULTS));
+
+var canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+canvas.width = LOGICAL_W * PIXEL_SCALE;
+canvas.height = LOGICAL_H * PIXEL_SCALE;
+
+var MAN = null, PAL = null, IMG = {}, C = {};
+var seaweed = [], bubbles = [], t0 = performance.now(), frozenT = null;
+var showGuides = true, weedsInFront = true;
+var titleCapBottom = 0, syncedOnce = false;
+
+function loadJSON(n) { return fetch(n, { cache: "no-cache" }).then(function (r) { return r.json(); }); }
+function loadImg(s) {
+  return new Promise(function (res, rej) {
+    var i = new Image();
+    i.onload = function () { res(i); }; i.onerror = rej; i.src = s;
+  });
+}
+
+Promise.all([loadJSON("manifest.json"), loadJSON("palette.json")]).then(function (r) {
+  MAN = r[0]; PAL = r[1].colors;
+  C = { ink: "#000000", white: "#FFFFFF", seaweed: "#917CF1", seaweed2: "#8E65FF", bg: "#FFD243" };
+  return Promise.all(["shrimp", "frog"].map(function (k) {
+    return loadImg(MAN.sheets[k].file).then(function (im) { IMG[k] = im; });
+  }));
+}).then(function () {
+  buildScenery();
+  bindUI();
+  requestAnimationFrame(loop);
+}).catch(function (e) {
+  document.getElementById("out").textContent =
+    "Could not load the game assets.\nOpen this page from the same folder as index.html,\n" +
+    "e.g. http://localhost:8777/position-tool.html\n\n" + e;
+});
+
+function buildScenery() {
+  seaweed = []; bubbles = [];
+  for (var i = 0; i < 14; i++) {
+    seaweed.push({ x: Math.random() * (LOGICAL_W + 200), h: 70 + Math.random() * 150,
+                   w: 9 + Math.random() * 9, phase: Math.random() * 6.28, back: Math.random() < 0.45 });
+  }
+  for (var j = 0; j < 26; j++) {
+    bubbles.push({ x: Math.random() * LOGICAL_W, y: Math.random() * LOGICAL_H,
+                   r: 3 + Math.random() * 9, rise: 12 + Math.random() * 26, phase: Math.random() * 6.28 });
+  }
+}
+
+function drawSheet(key, tMs, cx, cy, scale) {
+  var m = MAN.sheets[key], img = IMG[key];
+  var i = Math.floor(tMs / m.frameDuration) % m.frameCount;
+  var sx = (i % m.columns) * m.frameWidth, sy = Math.floor(i / m.columns) * m.frameHeight;
+  var w = (m.frameWidth / PIXEL_SCALE) * scale, h = (m.frameHeight / PIXEL_SCALE) * scale;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(-1, 1);                      // both face right in game via a flip
+  ctx.drawImage(img, sx, sy, m.frameWidth, m.frameHeight, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
+function boxOf(key) {
+  var m = MAN.sheets[key], p = pos[key];
+  var w = (m.frameWidth / PIXEL_SCALE) * p.scale, h = (m.frameHeight / PIXEL_SCALE) * p.scale;
+  return { x: p.x - w / 2, y: p.y - h / 2, w: w, h: h };
+}
+
+/* top of the frog's yellow eyes, in screen coords - cell row 15 of his sheet */
+var FROG_EYE_CELL_Y = 15;
+function frogEyeTop() {
+  var m = MAN.sheets.frog, h = (m.frameHeight / PIXEL_SCALE) * pos.frog.scale;
+  return pos.frog.y - h / 2 + FROG_EYE_CELL_Y * (h / m.frameHeight);
+}
+
+function drawSeaweed(t) {
+  var i, s, k;
+  for (var pass = 0; pass < 2; pass++) {
+    for (i = 0; i < seaweed.length; i++) {
+      s = seaweed[i];
+      if ((pass === 0) !== s.back) continue;
+      var baseY = LOGICAL_H + 6, segs = 5;
+      ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (k = 0; k < 2; k++) {
+        ctx.strokeStyle = k === 0 ? C.ink : (s.back ? C.seaweed2 : C.seaweed);
+        ctx.lineWidth = k === 0 ? s.w + 7 : s.w;
+        ctx.beginPath(); ctx.moveTo(s.x, baseY);
+        for (var q = 1; q <= segs; q++) {
+          var f = q / segs;
+          ctx.lineTo(s.x + Math.sin(t * 0.0016 + s.phase + f * 2.2) * (16 * f), baseY - s.h * f);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+}
+
+function drawBubbles(t) {
+  ctx.lineWidth = 3;
+  for (var i = 0; i < bubbles.length; i++) {
+    var s = bubbles[i];
+    var y = ((s.y - (t / 1000) * s.rise) % (LOGICAL_H + 40) + LOGICAL_H + 40) % (LOGICAL_H + 40) - 20;
+    ctx.beginPath();
+    ctx.arc(s.x + Math.sin(t * 0.002 + s.phase) * 6, y, s.r, 0, 6.2832);
+    ctx.fillStyle = C.white; ctx.globalAlpha = 0.45; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.ink; ctx.stroke();
+  }
+}
+
+function label(text, x, y, size, color) {
+  ctx.font = "800 " + size + "px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(3, size * 0.18); ctx.strokeStyle = C.ink;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color; ctx.fillText(text, x, y);
+  return ctx.measureText(text);
+}
+
+function drawButton(x, y, w, h, text) {
+  ctx.save(); ctx.lineJoin = "round";
+  var r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x - w / 2 + r, y - h / 2);
+  ctx.arcTo(x + w / 2, y - h / 2, x + w / 2, y + h / 2, r);
+  ctx.arcTo(x + w / 2, y + h / 2, x - w / 2, y + h / 2, r);
+  ctx.arcTo(x - w / 2, y + h / 2, x - w / 2, y - h / 2, r);
+  ctx.arcTo(x - w / 2, y - h / 2, x + w / 2, y - h / 2, r);
+  ctx.closePath();
+  ctx.fillStyle = C.white; ctx.fill();
+  ctx.lineWidth = 5; ctx.strokeStyle = C.ink; ctx.stroke();
+  ctx.restore();
+  ctx.font = "800 30px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = C.ink; ctx.fillText(text, x, y + 1);
+}
+
+function drawGuides() {
+  ctx.save();
+  ctx.setLineDash([7, 6]); ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(255,255,255,.85)";
+  ctx.beginPath();
+  ctx.moveTo(0, titleCapBottom); ctx.lineTo(LOGICAL_W, titleCapBottom); ctx.stroke();
+
+  var eY = frogEyeTop();
+  ctx.strokeStyle = Math.abs(eY - titleCapBottom) < 1.5 ? "rgba(120,255,150,.95)" : "rgba(255,120,200,.9)";
+  ctx.beginPath();
+  ctx.moveTo(0, eY); ctx.lineTo(LOGICAL_W, eY); ctx.stroke();
+
+  ctx.setLineDash([]);
+  ["shrimp", "frog"].forEach(function (k) {
+    var b = boxOf(k);
+    ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 1;
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+  });
+  ctx.restore();
+}
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  var t = frozenT !== null ? frozenT : now - t0;
+
+  ctx.setTransform(PIXEL_SCALE, 0, 0, PIXEL_SCALE, 0, 0);
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+
+  drawBubbles(t);
+  if (!weedsInFront) drawSeaweed(t);
+  drawSheet("shrimp", t, pos.shrimp.x, pos.shrimp.y, pos.shrimp.scale);
+  drawSheet("frog", t, pos.frog.x, pos.frog.y, pos.frog.scale);
+  if (weedsInFront) drawSeaweed(t);
+
+  var tm = label("STINK SHRIMP", LOGICAL_W / 2, TITLE_Y, TITLE_SIZE, C.white);
+  titleCapBottom = TITLE_Y + tm.actualBoundingBoxDescent;
+  drawButton(LOGICAL_W / 2, 300, 200, 62, "PLAY");
+
+  // the title metrics only exist after the first paint, so refresh the readout
+  if (!syncedOnce && titleCapBottom > 0) { syncedOnce = true; syncUI(); }
+
+  if (showGuides) drawGuides();
+}
+
+/* ------------------------------------------------------------------ input */
+
+var drag = null;
+function toLogical(e) {
+  var r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * LOGICAL_W,
+           y: (e.clientY - r.top) / r.height * LOGICAL_H };
+}
+function hit(k, p) {
+  var b = boxOf(k);
+  return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+}
+
+canvas.addEventListener("pointerdown", function (e) {
+  var p = toLogical(e);
+  var k = hit("frog", p) ? "frog" : (hit("shrimp", p) ? "shrimp" : null);
+  if (!k) return;
+  drag = { k: k, dx: pos[k].x - p.x, dy: pos[k].y - p.y };
+  canvas.classList.add("dragging");
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", function (e) {
+  if (!drag) return;
+  var p = toLogical(e);
+  pos[drag.k].x = Math.round(p.x + drag.dx);
+  pos[drag.k].y = Math.round(p.y + drag.dy);
+  syncUI();
+});
+function endDrag() { drag = null; canvas.classList.remove("dragging"); }
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+var ids = { shrimp: ["sx", "sy", "ss"], frog: ["fx", "fy", "fs"] };
+function bindUI() {
+  Object.keys(ids).forEach(function (k) {
+    var f = ["x", "y", "scale"];
+    ids[k].forEach(function (id, n) {
+      document.getElementById(id).addEventListener("input", function (e) {
+        pos[k][f[n]] = n === 2 ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
+        syncUI();
+      });
+    });
+  });
+  document.getElementById("reset").onclick = function () {
+    pos = JSON.parse(JSON.stringify(DEFAULTS)); syncUI();
+  };
+  document.getElementById("freeze").onclick = function (e) {
+    frozenT = frozenT === null ? (performance.now() - t0) : null;
+    e.target.classList.toggle("on", frozenT !== null);
+  };
+  document.getElementById("guides").onclick = function (e) {
+    showGuides = !showGuides; e.target.classList.toggle("on", showGuides);
+  };
+  document.getElementById("weeds").onclick = function (e) {
+    weedsInFront = !weedsInFront; e.target.classList.toggle("on", weedsInFront);
+  };
+  document.getElementById("copy").onclick = function () {
+    var txt = document.getElementById("out").textContent;
+    navigator.clipboard && navigator.clipboard.writeText(txt);
+    var b = document.getElementById("copy");
+    b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy numbers"; }, 1200);
+  };
+  syncUI();
+}
+
+function syncUI() {
+  Object.keys(ids).forEach(function (k) {
+    var f = ["x", "y", "scale"];
+    ids[k].forEach(function (id, n) {
+      document.getElementById(id).value = pos[k][f[n]];
+      document.getElementById(id + "v").textContent =
+        n === 2 ? pos[k][f[n]].toFixed(2) : pos[k][f[n]];
+    });
+  });
+  var eY = frogEyeTop(), d = eY - titleCapBottom;
+  document.getElementById("out").textContent =
+    "shrimp   x " + pos.shrimp.x + "   y " + pos.shrimp.y + "   scale " + pos.shrimp.scale.toFixed(2) + "\n" +
+    "frog     x " + pos.frog.x + "   y " + pos.frog.y + "   scale " + pos.frog.scale.toFixed(2) + "\n" +
+    "\n" +
+    "frog eye top   " + eY.toFixed(1) + "\n" +
+    "title baseline " + titleCapBottom.toFixed(1) + "\n" +
+    "difference     " + (d >= 0 ? "+" : "") + d.toFixed(1) + (Math.abs(d) < 1.5 ? "   (aligned)" : "");
+}
+</script>

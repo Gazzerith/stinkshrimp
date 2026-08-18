@@ -1,0 +1,60 @@
+/* Generated mirror of manifest.json - file:// fallback only. Do not edit. */
+window.__MANIFEST__ = {
+  "sheets": {
+    "shrimp": {
+      "file": "stink_shrimp.png",
+      "frameWidth": 179,
+      "frameHeight": 192,
+      "columns": 8,
+      "rows": 4,
+      "frameCount": 31,
+      "frameDuration": 60
+    },
+    "worry_fish_feminine": {
+      "file": "worry_fish_feminine.png",
+      "frameWidth": 282,
+      "frameHeight": 256,
+      "columns": 8,
+      "rows": 3,
+      "frameCount": 21,
+      "frameDuration": 90
+    },
+    "worry_fish_skinny": {
+      "file": "worry_fish_skinny.png",
+      "frameWidth": 258,
+      "frameHeight": 256,
+      "columns": 8,
+      "rows": 3,
+      "frameCount": 21,
+      "frameDuration": 90
+    },
+    "worry_fish_surprised": {
+      "file": "worry_fish_surprised.png",
+      "frameWidth": 282,
+      "frameHeight": 256,
+      "columns": 8,
+      "rows": 3,
+      "frameCount": 21,
+      "frameDuration": 90
+    },
+    "frog": {
+      "file": "frog.png",
+      "frameWidth": 376,
+      "frameHeight": 384,
+      "columns": 8,
+      "rows": 3,
+      "frameCount": 23,
+      "frameDuration": 60
+    },
+    "frog_in_love": {
+      "file": "frog_in_love.png",
+      "frameWidth": 376,
+      "frameHeight": 384,
+      "columns": 8,
+      "rows": 3,
+      "frameCount": 24,
+      "frameDuration": 60
+    }
+  },
+  "audio": "UNFORTUNATE__30-05-2026.mp3"
+};

@@ -1,0 +1,1350 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Stink Shrimp</title>
+
+<!-- iPhone Safari has no Fullscreen API, so the only way to lose the browser
+     chrome is Add to Home Screen. These make that launch standalone. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stink Shrimp">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="app.webmanifest">
+
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #000000; touch-action: none; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #stage {
+    position: absolute; left: 50%; top: 50%;
+    transform-origin: 50% 50%;
+    width: 844px; height: 390px;
+  }
+  #game { display: block; width: 844px; height: 390px; }
+  #credits {
+    position: absolute; left: 0; right: 0; bottom: 10px;
+    display: none; pointer-events: none;
+    font: 700 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: .02em; padding: 0 12px;
+    color: #FFFFFF;
+    text-shadow: 0 2px 0 #000000, 0 -2px 0 #000000, 2px 0 0 #000000,
+                 -2px 0 0 #000000, 2px 2px 0 #000000, -2px -2px 0 #000000,
+                 2px -2px 0 #000000, -2px 2px 0 #000000;
+  }
+  body.credits #credits { display: block; }
+  #credits .row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 7px; flex-wrap: wrap; margin-top: 5px;
+  }
+  #credits a {
+    padding: 4px 13px; border-radius: 999px; border: 3px solid #000000;
+    background: #FFFFFF; color: #000000; text-decoration: none;
+    text-shadow: none; pointer-events: auto; white-space: nowrap;
+  }
+  #credits a:active { background: #CD66FF; }
+  #rotate {
+    position: fixed; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: #000000; color: #FFFFFF; z-index: 10;
+    font: 700 22px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-align: center; letter-spacing: .08em; padding: 24px;
+  }
+  body.portrait #rotate { display: flex; }
+  body.portrait #stage { visibility: hidden; }
+
+  #a2hs {
+    position: fixed; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: #000000; color: #FFFFFF; z-index: 20;
+    font: 700 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-align: center; letter-spacing: .04em; padding: 20px;
+  }
+  body.a2hs #a2hs { display: flex; }
+  #a2hs .why-ios, #a2hs .why-other, #a2hs .why-local { display: none; }
+  body.ios #a2hs .why-ios { display: revert; }
+  body:not(.ios) #a2hs .why-other { display: revert; }
+  body.localfile #a2hs .why-local { display: revert; }
+  body.localfile #a2hs .steps { opacity: .45; }
+  #a2hs .box { max-width: 440px; }
+  #a2hs h2 { font-size: 22px; margin: 0 0 12px; letter-spacing: .01em; }
+  #a2hs .steps { margin: 0 0 18px; }
+  #a2hs button {
+    font: 800 15px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: .08em; padding: 12px 26px; border-radius: 999px;
+    border: 3px solid #000000; background: #FFFFFF; color: #000000;
+  }
+</style>
+
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="credits">
+    <div class="row">
+      <span>Play this track and other tracks from</span>
+      <a href="https://open.spotify.com/artist/3iIBHaGxpA8qPTlaHqKMk6"
+         target="_blank" rel="noopener noreferrer">Gareth&nbsp;Thomas on Spotify</a>
+    </div>
+    <div class="row">
+      <span>Illustrations by Nathan James Page</span>
+      <a href="https://www.instagram.com/nathan_james_page/"
+         target="_blank" rel="noopener noreferrer">@nathan_james_page</a>
+    </div>
+  </div>
+</div>
+<div id="rotate">ROTATE YOUR PHONE</div>
+<div id="a2hs"><div class="box">
+  <h2>Want it fullscreen?</h2>
+  <p class="why-ios steps">Tap Share &#11014;&#65038;, then <strong>Add to Home Screen</strong>.<br>
+     Takes a second, totally safe, and it lives on your home screen like an app.</p>
+  <p class="why-other steps">Open your browser menu, then <strong>Add to Home Screen</strong>.<br>
+     Takes a second, totally safe, and it lives on your home screen like an app.</p>
+  <p class="why-local"><strong>This copy is open from a local file</strong>, so
+     it can't be added. Put it on a web address first, then open that.</p>
+  <p><button id="a2hsClose">GOT IT</button></p>
+</div></div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ setup */
+
+var LOGICAL_W = 844, LOGICAL_H = 390, PIXEL_SCALE = 2;
+
+var canvas = document.getElementById("game");
+var stage  = document.getElementById("stage");
+var ctx    = canvas.getContext("2d");
+
+canvas.width  = LOGICAL_W * PIXEL_SCALE;
+canvas.height = LOGICAL_H * PIXEL_SCALE;
+canvas.style.width  = LOGICAL_W + "px";
+canvas.style.height = LOGICAL_H + "px";
+
+/* iPhone Safari has no element fullscreen at all, so the browser chrome cannot
+   be hidden without installing to the home screen. What it can do is give back
+   every pixel Safari is not using: visualViewport reports the genuinely visible
+   area, and it updates as Safari collapses or restores its toolbars, so the
+   game re-fits into whatever space actually exists instead of assuming. */
+function viewportSize() {
+  var vv = window.visualViewport;
+  return { w: vv ? vv.width : window.innerWidth,
+           h: vv ? vv.height : window.innerHeight };
+}
+
+function fitStage() {
+  var v = viewportSize();
+  var s = Math.min(v.w / LOGICAL_W, v.h / LOGICAL_H);
+  stage.style.transform = "translate(-50%,-50%) scale(" + s + ")";
+  document.body.classList.toggle("portrait", v.h > v.w);
+}
+
+window.addEventListener("resize", fitStage);
+window.addEventListener("orientationchange", function () {
+  fitStage();
+  setTimeout(fitStage, 250);   // iOS reports the new size a beat late
+});
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fitStage);
+  window.visualViewport.addEventListener("scroll", fitStage);
+}
+fitStage();
+
+/* ------------------------------------------------------- tuning constants */
+/* All of these are meant to be hand-tuned. */
+
+var PROGRESS_GAIN_PER_SEC   = 0.0157; // -> ~64s clean, ~83s with 20 hits
+var HEART_BAR_VALUE         = 0.04;   // one heart's worth of the bar (~25 per run)
+var PROGRESS_LOSS_PER_HIT   = HEART_BAR_VALUE;  // losing a heart drops the bar with it
+var KNOCKBACK_DISTANCE      = 90;     // logical px, delivered across the tail flick
+var HAZARD_SPEED            = 200;    // logical px/sec, leftward
+var HAZARD_SPAWN_START      = 2.00;   // seconds between hazards at progress 0
+var HAZARD_SPAWN_END        = 0.90;   // seconds between hazards at progress 1
+var HAZARD_AIM_SPREAD       = 45;     // px of slop on "aimed at his lane"
+var SHRIMP_RADIUS           = 26;     // collision radius, logical px
+var SHRIMP_LANE_LEFT        = 55;     // where he sits at progress 0
+var SHRIMP_LANE_REACH       = 516;    // where he sits at progress 1, just shy of her
+var HEART_SPEED             = 200;    // same as hazards: they share the stream
+var HEART_SPAWN_INTERVAL    = 2.60;   // seconds between hearts, constant
+var MISTAKES_ALLOWED        = 3;      // missed hearts + drool hits, judged at the end
+var DROOL_HITS_FATAL        = 3;      // this many hits and he takes her immediately
+
+var FLICK_STEP_MS   = 80;             // three held poses, 80ms each
+var FLICK_STEPS     = 3;
+var FLICK_TOTAL_MS  = FLICK_STEP_MS * FLICK_STEPS;
+var INVULN_MS       = 700;
+var SURPRISED_MS    = 400;            // fish reaction on heart pickup
+var BG_FADE_MS      = 400;
+var OPENING_MS      = 3000;
+var SCROLL_SPEED    = 130;            // world scroll, logical px/sec
+var BUBBLE_OUTLINE  = 2.25;           // 75% of the original 3px stroke
+// How closely the smile tracks his face as his head bobs. Flipping the mouth
+// inverts its bob, so it drifts against the face; this pulls it back. 0 leaves
+// the full drift, 1 locks the smile to the face exactly. The factor of two in
+// the maths is because a flip removes the natural motion and adds an equal and
+// opposite one, so it takes 2x to cancel.
+var MOUTH_FOLLOW    = 0.5625;
+// title screen layout, positioned by hand in position-tool.html
+var TITLE_SHRIMP = { x: 247, y: 211, scale: 1.15 };
+var TITLE_FROG   = { x: 624, y: 223, scale: 0.95 };
+
+/* --------------------------------------------------------- asset loading */
+
+var MAN = null, PAL = null, IMG = {}, C = {};
+var audioEl = null;
+
+function loadJSON(name, globalName, mirror) {
+  // the standalone build predefines these, so it never touches the network
+  if (window[globalName]) return Promise.resolve(window[globalName]);
+  return fetch(name, { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+    .catch(function () {
+      // file:// blocks fetch of local JSON; fall back to the generated mirror.
+      return new Promise(function (res, rej) {
+        if (window[globalName]) return res(window[globalName]);
+        var s = document.createElement("script");
+        s.src = mirror;
+        s.onload = function () {
+          window[globalName] ? res(window[globalName]) : rej(new Error("no " + globalName));
+        };
+        s.onerror = function () { rej(new Error("cannot load " + name)); };
+        document.head.appendChild(s);
+      });
+    });
+}
+
+/* The standalone build prepends window.__INLINE_ASSETS__, a map of filename ->
+   data: URI. Absent in the normal folder build, where these resolve to plain
+   relative paths. */
+function assetUrl(name) {
+  var inl = window.__INLINE_ASSETS__;
+  return (inl && inl[name]) ? inl[name] : name;
+}
+
+function loadImage(src) {
+  return new Promise(function (res, rej) {
+    var i = new Image();
+    i.onload = function () { res(i); };
+    i.onerror = function () { rej(new Error("cannot load " + src)); };
+    i.src = assetUrl(src);
+  });
+}
+
+/* Colour roles. Every hex here is asserted to exist in palette.json at load,
+   so the game cannot draw a colour the art does not contain. */
+var ROLES = {
+  ink:       "#000000", // outlines and text
+  white:     "#FFFFFF", // eye white / bubble fill
+  shrimp:    "#FFCCCB",
+  seaweed:   "#917CF1", // frog body purple - there is no green in the source art
+  seaweed2:  "#8E65FF", // fish spike purple, back layer
+  drool:     "#66CBFF", // pale cyan of the drool on the frog's lips
+  droolDeep: "#376BFF", // the deeper blue it pools into
+  heart:     "#CD66FF", // fish mouth magenta
+  tongue:    "#376BFF", // the blue of his tongue in the artwork
+  bgA:       "#FFD243", // fluorescent yellow (frog eye)
+  bgB:       "#FF67FF", // magenta (frog mouth)
+  bgC:       "#C073F7", // violet - stands in for the brief's lime green
+  bgD:       "#66CBFF"  // cyan (fish body)
+};
+var BG_CYCLE = [ROLES.bgA, ROLES.bgB, ROLES.bgC, ROLES.bgD];
+
+// seed C so anything drawn before palette.json resolves still uses real colours
+for (var _r in ROLES) C[_r] = ROLES[_r];
+
+function resolvePalette(pal) {
+  var list = pal.colors.map(function (h) { return h.toUpperCase(); });
+  function nearest(hex) {
+    var t = hexToRgb(hex), best = list[0], bd = Infinity;
+    for (var i = 0; i < list.length; i++) {
+      var p = hexToRgb(list[i]);
+      var d = (t[0]-p[0])*(t[0]-p[0]) + (t[1]-p[1])*(t[1]-p[1]) + (t[2]-p[2])*(t[2]-p[2]);
+      if (d < bd) { bd = d; best = list[i]; }
+    }
+    return best;
+  }
+  for (var k in ROLES) {
+    var want = ROLES[k].toUpperCase();
+    C[k] = list.indexOf(want) >= 0 ? want : nearest(want);
+  }
+  BG_CYCLE = [C.bgA, C.bgB, C.bgC, C.bgD];
+}
+
+function hexToRgb(h) {
+  return [parseInt(h.substr(1,2),16), parseInt(h.substr(3,2),16), parseInt(h.substr(5,2),16)];
+}
+function mixHex(a, b, t) {
+  var x = hexToRgb(a), y = hexToRgb(b);
+  return "rgb(" + Math.round(x[0]+(y[0]-x[0])*t) + "," +
+                  Math.round(x[1]+(y[1]-x[1])*t) + "," +
+                  Math.round(x[2]+(y[2]-x[2])*t) + ")";
+}
+
+/* Find whatever audio file is sitting in the folder, rather than assuming a
+   name. The build script scans the folder and records the filename it found in
+   manifest.json, which is the only approach that survives an arbitrary name on
+   a static host (there is no way to list a directory from the browser - most
+   hosts answer "/" with index.html, not an index of files). The directory
+   listing and name probe below are fallbacks for when the manifest predates
+   the track being dropped in. */
+var AUDIO_EXT = ["mp3","m4a","ogg","wav","aac","opus","webm","flac"];
+
+function findAudio() {
+  var declared = MAN && MAN.audio;
+  if (declared) {
+    return probe(declared).then(function (ok) { return ok ? declared : searchAudio(); });
+  }
+  return searchAudio();
+}
+
+function searchAudio() {
+  var NAMES = ["music","track","audio","song","theme","bgm","soundtrack","loop",
+               "stink-shrimp","stink_shrimp","stinkshrimp","shrimp","unfortunate"];
+  return fetch("./", { cache: "no-cache" })
+    .then(function (r) { return r.ok ? r.text() : ""; })
+    .catch(function () { return ""; })
+    .then(function (html) {
+      var found = [], seen = {};
+      var re = /(?:href|src)\s*=\s*["']([^"']+)["']/gi, m;
+      while ((m = re.exec(html))) {
+        var u = m[1].split("?")[0].split("#")[0];
+        if (AUDIO_EXT.indexOf(u.split(".").pop().toLowerCase()) >= 0 && !seen[u]) {
+          seen[u] = 1; found.push(u);
+        }
+      }
+      if (found.length) return probeList(found);
+      var cands = [];
+      for (var n = 0; n < NAMES.length; n++)
+        for (var e = 0; e < AUDIO_EXT.length; e++) cands.push(NAMES[n] + "." + AUDIO_EXT[e]);
+      return probeList(cands);
+    });
+
+  function probeList(list) {
+    var i = 0;
+    return next();
+    function next() {
+      if (i >= list.length) return Promise.resolve(null);
+      var url = list[i++];
+      return probe(url).then(function (ok) { return ok ? url : next(); });
+    }
+  }
+}
+
+function probe(url) {
+  return new Promise(function (res) {
+    var a = new Audio();
+    var done = false;
+    function finish(v) { if (!done) { done = true; clearTimeout(t); res(v); } }
+    var t = setTimeout(function () { finish(false); }, 2500);
+    a.addEventListener("canplaythrough", function () { finish(true); });
+    a.addEventListener("loadedmetadata",  function () { finish(true); });
+    a.addEventListener("error",           function () { finish(false); });
+    a.preload = "auto";
+    var inl = window.__INLINE_ASSETS__;
+    a.src = (inl && inl[url]) ? inl[url] : encodeURI(url);
+    a.load();
+  });
+}
+
+/* ------------------------------------------------------------- game state */
+
+var STATE = "loading";      // loading | title | opening | chase | ending
+var lastTime = 0, now = 0;
+
+var shrimp, fish, frog, hazards, hearts, seaweed, bubbles;
+var progress, heartsCollected, heartsSpawned, endingGood;
+var missedHearts, droolHits;
+var hazardTimer, heartTimer, openingT, endingT;
+var bgIndex, bgPrev, bgFadeT;
+var pointer = { x: 220, y: 195, active: false };
+var buttons = [];
+
+function resetWorld() {
+  shrimp = {
+    x: 200, y: 195, vy: 0, kb: 0,
+    facingRight: true,
+    flickStart: -1e9, invulnUntil: -1e9,
+    smiling: false
+  };
+  fish = { x: 648, y: 300, surprisedUntil: -1e9, sheet: "worry_fish_feminine",
+          offX: 0, flip: false };
+  frog = { x: 762, y: 168, sheet: "frog", offX: 0 };
+
+  hazards = [];
+  hearts  = [];
+  progress = 0;
+  heartsCollected = 0;
+  heartsSpawned = 0;
+  missedHearts = 0;
+  droolHits = 0;
+  endingGood = false;
+  hazardTimer = HAZARD_SPAWN_START;
+  heartTimer  = HEART_SPAWN_INTERVAL * 0.6;
+  openingT = 0;
+  endingT = 0;
+  bgIndex = 0; bgPrev = 0; bgFadeT = 1;
+
+  seaweed = [];
+  for (var i = 0; i < 14; i++) {
+    seaweed.push({
+      x: Math.random() * (LOGICAL_W + 200),
+      h: 70 + Math.random() * 150,
+      w: 9 + Math.random() * 9,
+      phase: Math.random() * 6.28,
+      back: Math.random() < 0.45
+    });
+  }
+  bubbles = [];
+  for (var j = 0; j < 26; j++) {
+    bubbles.push({
+      x: Math.random() * LOGICAL_W,
+      y: Math.random() * LOGICAL_H,
+      r: 3 + Math.random() * 9,
+      rise: 12 + Math.random() * 26,
+      phase: Math.random() * 6.28
+    });
+  }
+}
+
+/* --------------------------------------------------------------- helpers */
+
+function sheetMeta(key) { return MAN.sheets[key]; }
+
+function frameIndex(m, tMs) {
+  var i = Math.floor(tMs / m.frameDuration) % m.frameCount;
+  return i < 0 ? i + m.frameCount : i;
+}
+
+function drawSheet(key, tMs, cx, cy, opt) {
+  opt = opt || {};
+  var m = sheetMeta(key), img = IMG[key];
+  if (!m || !img) return;
+  var i = frameIndex(m, tMs);
+  var sx = (i % m.columns) * m.frameWidth;
+  var sy = Math.floor(i / m.columns) * m.frameHeight;
+  var w = m.frameWidth / PIXEL_SCALE, h = m.frameHeight / PIXEL_SCALE;
+  var scale = opt.scale || 1;
+  w *= scale; h *= scale;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (opt.pre) opt.pre(w, h);
+  ctx.scale(opt.flip ? -1 : 1, 1);
+  if (opt.alpha !== undefined) ctx.globalAlpha = opt.alpha;
+  ctx.drawImage(img, sx, sy, m.frameWidth, m.frameHeight, -w/2, -h/2, w, h);
+  if (opt.post) opt.post(w, h);   // draw over the art, inside its transform
+  ctx.restore();
+}
+
+function roundedLine(x1, y1, x2, y2, width, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
+
+function heartPath(cx, cy, s) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + s * 0.75);
+  ctx.bezierCurveTo(cx - s * 1.3, cy - s * 0.25, cx - s * 0.55, cy - s * 1.05, cx, cy - s * 0.35);
+  ctx.bezierCurveTo(cx + s * 0.55, cy - s * 1.05, cx + s * 1.3, cy - s * 0.25, cx, cy + s * 0.75);
+  ctx.closePath();
+}
+
+function label(text, x, y, size, color, align, noOutline) {
+  ctx.font = "800 " + size + "px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  ctx.textAlign = align || "center";
+  ctx.textBaseline = "middle";
+  if (!noOutline) {
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(3, size * 0.18);
+    ctx.strokeStyle = C.ink;
+    ctx.strokeText(text, x, y);
+  }
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+function drawButton(b) {
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  var r = b.h / 2;
+  ctx.moveTo(b.x - b.w/2 + r, b.y - b.h/2);
+  ctx.arcTo(b.x + b.w/2, b.y - b.h/2, b.x + b.w/2, b.y + b.h/2, r);
+  ctx.arcTo(b.x + b.w/2, b.y + b.h/2, b.x - b.w/2, b.y + b.h/2, r);
+  ctx.arcTo(b.x - b.w/2, b.y + b.h/2, b.x - b.w/2, b.y - b.h/2, r);
+  ctx.arcTo(b.x - b.w/2, b.y - b.h/2, b.x + b.w/2, b.y - b.h/2, r);
+  ctx.closePath();
+  ctx.fillStyle = C.white;
+  ctx.fill();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = C.ink;
+  ctx.stroke();
+  ctx.restore();
+  label(b.text, b.x, b.y + 1, b.size || 26, C.ink, "center", true);
+}
+
+function hitButton(b, px, py) {
+  return Math.abs(px - b.x) <= b.w/2 && Math.abs(py - b.y) <= b.h/2;
+}
+
+/* ------------------------------------------------------------ background */
+
+function bumpBackground() {
+  bgPrev = bgIndex;
+  bgIndex = (bgIndex + 1) % BG_CYCLE.length;
+  bgFadeT = 0;
+}
+
+function currentBg() {
+  return bgFadeT >= 1 ? BG_CYCLE[bgIndex]
+                      : mixHex(BG_CYCLE[bgPrev], BG_CYCLE[bgIndex], bgFadeT);
+}
+
+function updateBackground(dt) {
+  if (bgFadeT < 1) bgFadeT = Math.min(1, bgFadeT + dt * 1000 / BG_FADE_MS);
+}
+
+function updateScenery(dt, scroll) {
+  var i, s;
+  for (i = 0; i < seaweed.length; i++) {
+    s = seaweed[i];
+    s.x -= scroll * (s.back ? 0.55 : 1) * dt;
+    if (s.x < -60) {
+      s.x += LOGICAL_W + 200 + Math.random() * 120;
+      s.h = 70 + Math.random() * 150;
+      s.w = 9 + Math.random() * 9;
+    }
+  }
+  for (i = 0; i < bubbles.length; i++) {
+    s = bubbles[i];
+    s.x -= scroll * 0.7 * dt;
+    s.y -= s.rise * dt;
+    if (s.y < -20) { s.y = LOGICAL_H + 20; s.x = Math.random() * LOGICAL_W; }
+    if (s.x < -30) { s.x += LOGICAL_W + 60; }
+  }
+}
+
+function drawScenery(t) {
+  drawBubbles(t);
+  drawSeaweed(t);
+}
+
+function drawSeaweed(t) {
+  var i, s, k;
+  // seaweed, back layer then front
+  for (var pass = 0; pass < 2; pass++) {
+    for (i = 0; i < seaweed.length; i++) {
+      s = seaweed[i];
+      if ((pass === 0) !== s.back) continue;
+      var baseY = LOGICAL_H + 6;
+      var segs = 5;
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      // black outline underneath, then the fill stroke on top
+      for (k = 0; k < 2; k++) {
+        ctx.strokeStyle = k === 0 ? C.ink : (s.back ? C.seaweed2 : C.seaweed);
+        ctx.lineWidth = k === 0 ? s.w + 7 : s.w;
+        ctx.beginPath();
+        ctx.moveTo(s.x, baseY);
+        for (var q = 1; q <= segs; q++) {
+          var f = q / segs;
+          var sway = Math.sin(t * 0.0016 + s.phase + f * 2.2) * (16 * f);
+          ctx.lineTo(s.x + sway, baseY - s.h * f);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+}
+
+function drawBubbles(t) {
+  ctx.lineWidth = BUBBLE_OUTLINE;
+  for (var i = 0; i < bubbles.length; i++) {
+    var s = bubbles[i];
+    var wob = Math.sin(t * 0.002 + s.phase) * 6;
+    ctx.beginPath();
+    ctx.arc(s.x + wob, s.y, s.r, 0, 6.2832);
+    ctx.fillStyle = C.white;
+    ctx.globalAlpha = 0.45;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.ink;
+    ctx.stroke();
+  }
+}
+
+/* ---------------------------------------------------------------- shrimp */
+
+function flickStep() {
+  var e = now - shrimp.flickStart;
+  if (e < 0 || e >= FLICK_TOTAL_MS) return -1;
+  return Math.min(FLICK_STEPS - 1, Math.floor(e / FLICK_STEP_MS));
+}
+
+/* Three held poses. No interpolation between them - the snap is the point.
+   `ext` is how far the tail is thrown out, `share` is the fraction of
+   KNOCKBACK_DISTANCE delivered during that step, so the movement and the
+   drawing land together. */
+var FLICK_POSES = [
+  { ext: 1.00, share: 0.5333 },   // body snaps straight
+  { ext: 0.55, share: 0.3111 },   // half recoiled
+  { ext: 0.00, share: 0.1556 }    // back to its curl
+];
+
+/* The tail uncurl. He is drawn as a C - head upper left, body arcing right,
+   tail fan returning to lower left - so straightening him means throwing the
+   tail end further down and away from the curl. Everything below TAIL_SPLIT is
+   drawn as strips with a ramped offset, which uncoils the body without the
+   hard seam a single cut would leave. */
+var TAIL_SPLIT_CELL_Y = 118;
+var TAIL_DX = -13, TAIL_DY = 8;   // local units at scale 1, at full extension
+var TAIL_STRIPS = 15;
+FLICK_POSES.forEach(function (p) {
+  p.kb = -(KNOCKBACK_DISTANCE * p.share) / (FLICK_STEP_MS / 1000);
+});
+
+function updateShrimp(dt) {
+  var step = flickStep();
+
+  // Vertical is the only axis the player drives.
+  var STIFF = 42, DAMP = 0.88;
+  shrimp.vy += (pointer.y - shrimp.y) * STIFF * dt;
+  shrimp.vy *= Math.pow(DAMP, dt * 60);
+  shrimp.y  += shrimp.vy * dt;
+  shrimp.y = Math.max(58, Math.min(332, shrimp.y));
+
+  // Horizontal comes straight off the meter. A hit still recoils him, but as
+  // a decaying offset, so he settles back onto exactly what the meter says.
+  if (step >= 0) shrimp.kb += FLICK_POSES[step].kb * dt;
+  else shrimp.kb *= Math.pow(0.0015, dt);
+  shrimp.x = Math.max(20, shrimpTrackX() + shrimp.kb);
+}
+
+/* His x is a pure function of progress: hard left at 0, nose just short of
+   her at 1. He never swims left, so he never turns around. */
+function shrimpTrackX() {
+  return SHRIMP_LANE_LEFT + (SHRIMP_LANE_REACH - SHRIMP_LANE_LEFT) * clamp01(progress);
+}
+
+/* The happy mouth is his own frown flipped upside down, in place. That box is
+   flat face colour apart from the mouth stroke, so redrawing it flipped both
+   covers the frown and leaves the smile exactly where the frown was, directly
+   under his eyes. Measured off the sheet: the mouth blob spans cell x46-61,
+   y68-76 in every frame; padded by 2px here. */
+var MOUTH_BOX = { x: 44, y: 67, w: 19, h: 11 };
+
+/* His head bobs, so the mouth sits a little higher or lower in the box on each
+   frame. Flipping inverts that travel, which reads as the smile bouncing
+   against his face, so it gets damped toward the average position. Measured
+   once at load; if the canvas is tainted (file://) it simply stays undamped. */
+var mouthCentre = null, mouthCentreMean = 0;
+
+function measureMouthBounce() {
+  try {
+    var m = MAN.sheets.shrimp, img = IMG.shrimp;
+    var cv = document.createElement("canvas");
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    var g = cv.getContext("2d");
+    g.drawImage(img, 0, 0);
+    var out = [], total = 0;
+    for (var i = 0; i < m.frameCount; i++) {
+      var sx = (i % m.columns) * m.frameWidth + MOUTH_BOX.x;
+      var sy = Math.floor(i / m.columns) * m.frameHeight + MOUTH_BOX.y;
+      var d = g.getImageData(sx, sy, MOUTH_BOX.w, MOUTH_BOX.h).data;
+      var sum = 0, n = 0;
+      for (var y = 0; y < MOUTH_BOX.h; y++) {
+        for (var x = 0; x < MOUTH_BOX.w; x++) {
+          var k = (y * MOUTH_BOX.w + x) * 4;
+          if (d[k + 3] > 200 && d[k] + d[k + 1] + d[k + 2] < 170) { sum += y; n++; }
+        }
+      }
+      var c = MOUTH_BOX.y + (n ? sum / n : MOUTH_BOX.h / 2);
+      out.push(c); total += c;
+    }
+    mouthCentre = out;
+    mouthCentreMean = total / out.length;
+  } catch (e) {
+    mouthCentre = null;
+  }
+}
+
+function drawShrimpSmile(w, h) {
+  var m = sheetMeta("shrimp"), img = IMG.shrimp;
+  var idx = frameIndex(m, now);
+  var sx = (idx % m.columns) * m.frameWidth;
+  var sy = Math.floor(idx / m.columns) * m.frameHeight;
+  var kx = w / m.frameWidth, ky = h / m.frameHeight;
+  var dw = MOUTH_BOX.w * kx, dh = MOUTH_BOX.h * ky;
+  var damp = mouthCentre
+    ? MOUTH_FOLLOW * 2 * (mouthCentre[idx] - mouthCentreMean) : 0;
+
+  ctx.save();
+  ctx.translate(-w / 2 + MOUTH_BOX.x * kx,
+                -h / 2 + (MOUTH_BOX.y + damp) * ky + dh / 2);
+  ctx.scale(1, -1);
+  ctx.drawImage(img, sx + MOUTH_BOX.x, sy + MOUTH_BOX.y, MOUTH_BOX.w, MOUTH_BOX.h,
+                0, -dh / 2, dw, dh);
+  ctx.restore();
+}
+
+/* Draws the frame with the lower body thrown out by `ext` (0 = his normal
+   curl, 1 = snapped straight). Strips below the split get a squared ramp so
+   the tip travels furthest and the join stays invisible. */
+function drawShrimpBody(m, img, idx, w, h, ext) {
+  var sx = (idx % m.columns) * m.frameWidth;
+  var sy = Math.floor(idx / m.columns) * m.frameHeight;
+  if (ext <= 0) {
+    ctx.drawImage(img, sx, sy, m.frameWidth, m.frameHeight, -w / 2, -h / 2, w, h);
+    return;
+  }
+  var split = TAIL_SPLIT_CELL_Y;
+  var ky = h / m.frameHeight;
+  ctx.drawImage(img, sx, sy, m.frameWidth, split, -w / 2, -h / 2, w, split * ky);
+
+  var srcStrip = (m.frameHeight - split) / TAIL_STRIPS;
+  for (var i = 0; i < TAIL_STRIPS; i++) {
+    var f = (i + 1) / TAIL_STRIPS;
+    var e = ext * f * f;
+    var srcY = split + i * srcStrip;
+    ctx.drawImage(img, sx, sy + srcY, m.frameWidth, srcStrip,
+                  -w / 2 + TAIL_DX * e, -h / 2 + srcY * ky + TAIL_DY * e,
+                  w, srcStrip * ky + 0.7);   // overlap hides seams between strips
+  }
+}
+
+function drawShrimp() {
+  var step = flickStep();
+  var ext = step >= 0 ? FLICK_POSES[step].ext : 0;
+  // art faces left, so the default draw is mirrored to face right
+  var flip = shrimp.facingRight;
+  var blink = (now < shrimp.invulnUntil && Math.floor(now / 70) % 2 === 0) ? 0.45 : 1;
+  var m = sheetMeta("shrimp"), img = IMG.shrimp;
+  if (!m || !img) return;
+  var w = m.frameWidth / PIXEL_SCALE, h = m.frameHeight / PIXEL_SCALE;
+
+  ctx.save();
+  ctx.translate(shrimp.x, shrimp.y);
+  ctx.scale(flip ? -1 : 1, 1);
+  ctx.globalAlpha = blink;
+  drawShrimpBody(m, img, frameIndex(m, now), w, h, ext);
+  if (shrimp.smiling) drawShrimpSmile(w, h);
+  ctx.restore();
+}
+
+/* -------------------------------------------------------- hazards/hearts */
+
+function spawnHazard() {
+  hazards.push({
+    x: LOGICAL_W + 30,
+    y: Math.max(70, Math.min(320, shrimp.y + (Math.random() * 2 - 1) * HAZARD_AIM_SPREAD)),
+    r: 15,
+    wob: Math.random() * 6.28
+  });
+}
+
+/* Hearts deliberately spawn away from the lane the Shrimp is sitting in.
+   The Frog aims hazards at that lane, so going for a heart means leaving the
+   lane you were safe in - that trade is what makes the good ending losable. */
+function spawnHeart() {
+  var best = 70 + Math.random() * 250, bestD = -1;
+  for (var i = 0; i < 3; i++) {
+    var y = 70 + Math.random() * 250;
+    var d = Math.abs(y - shrimp.y);
+    if (d > bestD) { bestD = d; best = y; }
+  }
+  hearts.push({ x: LOGICAL_W + 30, y: best, r: 15, phase: Math.random() * 6.28 });
+  heartsSpawned++;
+}
+
+/* Coloured to match the drool hanging off the Frog's lips: pale cyan body,
+   deeper blue pooling at the base, white highlight, heavy black outline.
+   Pulses and wobbles so it reads as viscous rather than a solid pellet. */
+function drawHazard(h, t) {
+  var ph = t * 0.004 + h.wob;
+  var pulse = 1 + Math.sin(ph) * 0.09;
+  var squish = 1 + Math.sin(ph * 1.7 + 1.1) * 0.11;
+  var y = h.y + Math.sin(t * 0.003 + h.wob) * 5;
+  var r = h.r;
+
+  ctx.save();
+  ctx.translate(h.x, y);
+  ctx.scale(pulse * squish, pulse / squish);
+  ctx.lineJoin = "round";
+
+  splatPath(r, ph);
+  ctx.fillStyle = C.drool;
+  ctx.fill();
+
+  // deeper blue pooling along the underside
+  ctx.save();
+  ctx.clip();
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.15, r * 0.62, r * 1.15, r * 0.5, 0, 0, 6.2832);
+  ctx.fillStyle = C.droolDeep;
+  ctx.fill();
+  ctx.restore();
+
+  // wet highlight
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.42, -r * 0.34, r * 0.34, r * 0.22, -0.5, 0, 6.2832);
+  ctx.fillStyle = C.white;
+  ctx.fill();
+
+  splatPath(r, ph);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = C.ink;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* A rounded splat: a closed blob with soft uneven lobes that slowly churn.
+   Sized to sit in the same footprint as a heart so the two read as the same
+   class of thing in the stream. */
+function splatPath(r, ph) {
+  var LOBES = 7, pts = [], i, a, rr;
+  for (i = 0; i < LOBES; i++) {
+    a = (i / LOBES) * 6.2832;
+    rr = r * (0.77 + 0.115 * Math.sin(a * 2 + ph) + 0.061 * Math.sin(a * 3 - ph * 0.7));
+    pts.push([Math.cos(a) * rr, Math.sin(a) * rr]);
+  }
+  // smooth closed curve: quadratics through the midpoints between lobes
+  ctx.beginPath();
+  var mx = (pts[LOBES - 1][0] + pts[0][0]) / 2;
+  var my = (pts[LOBES - 1][1] + pts[0][1]) / 2;
+  ctx.moveTo(mx, my);
+  for (i = 0; i < LOBES; i++) {
+    var cur = pts[i], nxt = pts[(i + 1) % LOBES];
+    ctx.quadraticCurveTo(cur[0], cur[1], (cur[0] + nxt[0]) / 2, (cur[1] + nxt[1]) / 2);
+  }
+  ctx.closePath();
+}
+
+function drawHeart(h, t) {
+  var y = h.y + Math.sin(t * 0.0025 + h.phase) * 9;
+  ctx.save();
+  ctx.translate(h.x, y);
+  ctx.rotate(Math.sin(t * 0.002 + h.phase) * 0.18);
+  heartPath(0, 0, h.r);
+  ctx.fillStyle = C.heart;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = C.ink;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------ characters */
+
+function drawFrog() {
+  // art faces right; mirror so he faces down-screen toward the shrimp
+  drawSheet(frog.sheet, now, frog.x + frog.offX, frog.y, { flip: true });
+}
+
+function drawFish() {
+  var key = fish.sheet;
+  if (STATE === "chase" && now < fish.surprisedUntil) key = "worry_fish_surprised";
+  drawSheet(key, now, fish.x + fish.offX, fish.y, { flip: fish.flip });
+}
+
+/* ------------------------------------------------------------------- HUD */
+
+function drawHUD() {
+  var x = 20, y = 22, w = 430, h = 16;
+  ctx.save();
+  ctx.lineJoin = "round";
+  // track
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.fillStyle = C.white;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = C.ink;
+  ctx.stroke();
+  // fill
+  if (progress > 0) {
+    ctx.beginPath();
+    ctx.rect(x + 2, y + 2, Math.max(0, (w - 4) * Math.min(1, progress)), h - 4);
+    ctx.fillStyle = C.heart;
+    ctx.fill();
+  }
+  ctx.restore();
+
+  label(String(heartsCollected), x + w + 18, y + h / 2 + 1, 24, C.white, "left");
+
+  drawFsButton();
+}
+
+/* ------------------------------------------------------------ fullscreen */
+
+var fsBtn   = { x: 812, y: 30, r: 20 };
+
+function fsElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+function fsSupported() {
+  var e = document.documentElement;
+  return !!(e.requestFullscreen || e.webkitRequestFullscreen);
+}
+/* Already launched from the home screen (or an installed PWA): there is no
+   browser chrome left to hide, so the button is pointless. */
+function isStandalone() {
+  if (window.navigator.standalone === true) return true;
+  if (!window.matchMedia) return false;
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.matchMedia("(display-mode: fullscreen)").matches;
+}
+function showFsButton() {
+  // On iPhone the API does not exist, so the button could only ever open an
+  // instruction panel. That is friction, not a feature - the title screen
+  // carries a quiet one-line hint there instead.
+  if (isStandalone()) return false;
+  return fsSupported() || !IS_IOS;
+}
+
+var IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+             (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+function showInstallHelp() {
+  document.body.classList.toggle("ios", IS_IOS);
+  // Add to Home Screen needs a real URL; it cannot work from file://
+  document.body.classList.toggle("localfile", location.protocol === "file:");
+  document.body.classList.add("a2hs");
+}
+
+function toggleFullscreen() {
+  if (!fsSupported()) {           // iPhone Safari - offer Add to Home Screen
+    showInstallHelp();
+    return;
+  }
+  var e = document.documentElement;
+  if (fsElement()) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    return;
+  }
+  // Some embeddings expose the API but refuse the request. Never leave the
+  // button doing nothing - fall back to the install route.
+  var p;
+  try {
+    p = (e.requestFullscreen || e.webkitRequestFullscreen).call(e);
+  } catch (err) {
+    showInstallHelp();
+    return;
+  }
+  if (p && p.catch) p.catch(showInstallHelp);
+}
+
+document.getElementById("a2hsClose").addEventListener("click", function () {
+  document.body.classList.remove("a2hs");
+});
+document.addEventListener("fullscreenchange", fitStage);
+document.addEventListener("webkitfullscreenchange", fitStage);
+
+function drawFsButton() {
+  if (!showFsButton()) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(fsBtn.x, fsBtn.y, fsBtn.r, 0, 6.2832);
+  ctx.fillStyle = C.white;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = C.ink;
+  ctx.stroke();
+
+  ctx.translate(fsBtn.x, fsBtn.y);
+  ctx.strokeStyle = C.ink;
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // four corner brackets: outward when windowed, inward when fullscreen
+  var inward = !!fsElement(), a = 9, b = 4;
+  for (var q = 0; q < 4; q++) {
+    var sx = (q === 0 || q === 3) ? -1 : 1;
+    var sy = (q < 2) ? -1 : 1;
+    ctx.beginPath();
+    if (inward) {
+      ctx.moveTo(sx * b, sy * a);
+      ctx.lineTo(sx * b, sy * b);
+      ctx.lineTo(sx * a, sy * b);
+    } else {
+      ctx.moveTo(sx * b, sy * a);
+      ctx.lineTo(sx * a, sy * a);
+      ctx.lineTo(sx * a, sy * b);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* -------------------------------------------------------------- opening */
+/* The tongue is drawn in code: no grab art exists. Crude on purpose. */
+
+function openingTongue(p) {
+  // p: 0..1 across the whole opening
+  var fishHome = { x: 470, y: 190 };
+  var tipX, wrapped = false, fishX = fishHome.x, fishY = fishHome.y;
+
+  if (p < 0.20) {
+    return { show: false, fishX: fishX, fishY: fishY };
+  } else if (p < 0.42) {
+    var e = (p - 0.20) / 0.22;
+    tipX = LOGICAL_W + 60 + (fishHome.x - (LOGICAL_W + 60)) * e;
+  } else if (p < 0.55) {
+    tipX = fishHome.x;
+    wrapped = true;
+  } else if (p < 0.85) {
+    var r = (p - 0.55) / 0.30;
+    r = r * r;                                   // retract fast
+    tipX = fishHome.x + (LOGICAL_W + 120 - fishHome.x) * r;
+    fishX = tipX;
+    fishY = fishHome.y - Math.sin(r * 3.14) * 18;
+    wrapped = true;
+  } else {
+    return { show: false, fishX: LOGICAL_W + 200, fishY: fishHome.y, gone: true };
+  }
+  return { show: true, tipX: tipX, wrapped: wrapped, fishX: fishX, fishY: fishY };
+}
+
+/* Behind the fish: the shaft, plus the far side of the coil. */
+function drawTongueBack(tip, y, wrapped) {
+  var y0 = y - 6;
+  roundedLine(LOGICAL_W + 80, y0, tip, y, 21, C.ink);
+  roundedLine(LOGICAL_W + 80, y0, tip, y, 14, C.tongue);
+  if (wrapped) ringStroke(tip, y, 54, 0, 6.2832);
+}
+
+/* In front of the fish: just a band across her, so the coil reads as wrapped
+   around rather than pasted over her face. */
+function drawTongueFront(tip, y, wrapped) {
+  if (!wrapped) return;
+  ringStroke(tip, y, 54, 2.15, 4.13);
+}
+
+function ringStroke(cx, cy, r, a0, a1) {
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.strokeStyle = C.ink;
+  ctx.lineWidth = 22;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, a0, a1);
+  ctx.stroke();
+  ctx.strokeStyle = C.tongue;
+  ctx.lineWidth = 14;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, a0, a1);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* ---------------------------------------------------------------- phases */
+
+/* The end-credit links are real DOM anchors so they open properly on a phone.
+   Only toggle on change - this runs inside the render loop. */
+var creditsShown = false;
+function setCredits(on) {
+  if (on === creditsShown) return;
+  creditsShown = on;
+  document.body.classList.toggle("credits", on);
+}
+
+function startGame() {
+  setCredits(false);
+  resetWorld();
+  STATE = "opening";
+  pointer.x = 200; pointer.y = 195;
+  if (audioEl) { audioEl.currentTime = 0; audioEl.play().catch(function(){}); }
+}
+
+function beginChase() {
+  STATE = "chase";
+  shrimp.x = shrimpTrackX(); shrimp.y = 195;
+  shrimp.vy = 0; shrimp.kb = 0;
+  pointer.y = 195;
+}
+
+function endRun(forceBad) {
+  STATE = "ending";
+  endingT = 0;
+  // every heart he let past, plus every hit of drool. Over the allowance and
+  // the Frog takes her. Deliberately not surfaced as a counter.
+  endingGood = !forceBad && (missedHearts + droolHits) <= MISTAKES_ALLOWED;
+  // remember where everyone was, so the ending can move them from there
+  fish.fromX = fish.x; fish.fromY = fish.y;
+  shrimp.fromX = shrimp.x; shrimp.fromY = shrimp.y;
+  if (endingGood) {
+    fish.sheet = "worry_fish_skinny";   // deflated. deflated means in love.
+    frog.sheet = "frog";
+    fish.flip = true;                   // turn her round to face him
+    shrimp.smiling = true;
+  } else {
+    fish.sheet = "worry_fish_feminine";
+    frog.sheet = "frog_in_love";        // this sheet already has heart pupils
+  }
+}
+
+function updateOpening(dt) {
+  openingT += dt * 1000;
+  if (openingT >= OPENING_MS) beginChase();
+}
+
+function updateChase(dt) {
+  updateShrimp(dt);
+  updateScenery(dt, SCROLL_SPEED);
+
+  progress += PROGRESS_GAIN_PER_SEC * dt;
+  if (progress >= 1) { progress = 1; endRun(); return; }
+
+  // spawn rate ramps with progress. that is the whole difficulty curve.
+  var interval = HAZARD_SPAWN_START + (HAZARD_SPAWN_END - HAZARD_SPAWN_START) * progress;
+  hazardTimer -= dt;
+  if (hazardTimer <= 0) { spawnHazard(); hazardTimer = interval; }
+
+  heartTimer -= dt;
+  if (heartTimer <= 0) { spawnHeart(); heartTimer = HEART_SPAWN_INTERVAL; }
+
+  var i, o, dx, dy;
+  for (i = hazards.length - 1; i >= 0; i--) {
+    o = hazards[i];
+    o.x -= HAZARD_SPEED * dt;
+    if (o.x < -60) { hazards.splice(i, 1); continue; }
+    if (now >= shrimp.invulnUntil) {
+      dx = o.x - shrimp.x; dy = o.y - shrimp.y;
+      if (dx*dx + dy*dy < (o.r + SHRIMP_RADIUS) * (o.r + SHRIMP_RADIUS)) {
+        hazards.splice(i, 1);
+        onHit();
+        if (STATE !== "chase") return;
+      }
+    }
+  }
+  for (i = hearts.length - 1; i >= 0; i--) {
+    o = hearts[i];
+    o.x -= HEART_SPEED * dt;
+    if (o.x < -60) { hearts.splice(i, 1); missedHearts++; continue; }
+    dx = o.x - shrimp.x; dy = o.y - shrimp.y;
+    if (dx*dx + dy*dy < (o.r + SHRIMP_RADIUS) * (o.r + SHRIMP_RADIUS)) {
+      hearts.splice(i, 1);
+      onHeart();
+    }
+  }
+}
+
+function onHit() {
+  progress = Math.max(0, progress - PROGRESS_LOSS_PER_HIT);
+  droolHits++;
+  heartsCollected = Math.max(0, heartsCollected - 1);
+  shrimp.flickStart = now;
+  shrimp.invulnUntil = now + INVULN_MS;
+  bumpBackground();
+  // enough drool and he does not wait for the run to finish
+  if (droolHits >= DROOL_HITS_FATAL) endRun(true);
+}
+
+function onHeart() {
+  heartsCollected++;
+  fish.surprisedUntil = now + SURPRISED_MS;
+  bumpBackground();
+}
+
+// where the two of them settle in the winning ending
+// low enough to clear the ending text and the AGAIN button above them
+var MEET_SHRIMP_X = 352, MEET_FISH_X = 486, MEET_Y = 220;
+
+function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+function ease(t) { return 1 - Math.pow(1 - t, 3); }
+
+function updateEnding(dt) {
+  endingT += dt * 1000;
+  updateScenery(dt, SCROLL_SPEED * 0.35);
+  if (endingGood) {
+    // the Frog gives up and clears off right; the two of them meet in the middle
+    var k = ease(clamp01((endingT - 200) / 1500));
+    frog.offX = 420 * k;
+    fish.x = fish.fromX + (MEET_FISH_X - fish.fromX) * k;
+    fish.y = fish.fromY + (MEET_Y - fish.fromY) * k;
+    shrimp.x = shrimp.fromX + (MEET_SHRIMP_X - shrimp.fromX) * k;
+    shrimp.y = shrimp.fromY + (MEET_Y + 6 - shrimp.fromY) * k;
+    shrimp.vy = 0; shrimp.kb = 0;
+  } else if (endingT > 400) {
+    // he takes her off screen right
+    var k = Math.min(1, (endingT - 400) / 1600);
+    frog.offX = 260 * k * k;
+    fish.offX = 300 * k * k;
+  }
+}
+
+/* ----------------------------------------------------------------- draw */
+
+function drawFrame() {
+  ctx.setTransform(PIXEL_SCALE, 0, 0, PIXEL_SCALE, 0, 0);
+  ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+
+  ctx.fillStyle = STATE === "title" || STATE === "loading" ? BG_CYCLE[0] : currentBg();
+  ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+
+  buttons = [];
+
+  if (STATE === "loading") {
+    label("LOADING", LOGICAL_W / 2, LOGICAL_H / 2, 34, C.white);
+    return;
+  }
+
+  if (STATE === "title") {
+    // On the title only the layering is bubbles / pair / weeds, so the weeds
+    // pass in front of them and the bubbles sit behind. Positions below were
+    // set by hand in position-tool.html.
+    drawBubbles(now);
+    drawSheet("shrimp", now, TITLE_SHRIMP.x, TITLE_SHRIMP.y,
+              { flip: true, scale: TITLE_SHRIMP.scale });
+    drawSheet("frog", now, TITLE_FROG.x, TITLE_FROG.y,
+              { flip: true, scale: TITLE_FROG.scale });
+    drawSeaweed(now);
+    label("STINK SHRIMP", LOGICAL_W / 2, 96, 62, C.white);
+    var play = { x: LOGICAL_W / 2, y: 300, w: 200, h: 62, text: "PLAY", size: 30, id: "play" };
+    buttons.push(play);
+    drawButton(play);
+    drawFsButton();
+    if (!isStandalone() && !fsSupported() && IS_IOS) {
+      var hint = { x: LOGICAL_W / 2, y: 352, w: 330, h: 28, id: "a2hshint" };
+      label("ADD TO HOME SCREEN FOR FULLSCREEN", hint.x, hint.y, 14, C.white);
+      buttons.push(hint);          // tappable, but deliberately not a button
+    }
+    return;
+  }
+
+  drawScenery(now);
+
+  if (STATE === "opening") {
+    var p = openingT / OPENING_MS;
+    var o = openingTongue(p);
+    if (o.show) drawTongueBack(o.tipX, o.fishY, o.wrapped);
+    if (!o.gone) drawSheet("worry_fish_feminine", now, o.fishX, o.fishY, {});
+    if (o.show) drawTongueFront(o.tipX, o.fishY, o.wrapped);
+    drawSheet("shrimp", now, 340, 210, { flip: true });
+    label("TAP TO SKIP", LOGICAL_W / 2, LOGICAL_H - 26, 18, C.white);
+    return;
+  }
+
+  // chase + ending share the layout
+  var i;
+  for (i = 0; i < hazards.length; i++) drawHazard(hazards[i], now);
+  for (i = 0; i < hearts.length; i++)  drawHeart(hearts[i], now);
+
+  drawFrog();
+  drawFish();
+  drawShrimp();
+
+  if (STATE === "chase") {
+    drawHUD();
+    return;
+  }
+
+  // ending
+  drawFsButton();
+  if (endingT > 1400) {
+    var line = endingGood ? "SHE DEFLATED FOR YOU" : "THE FROG TOOK HER";
+    label(line, LOGICAL_W / 2, 62, 42, C.white);
+    var again = { x: LOGICAL_W / 2, y: 126, w: 180, h: 54, text: "AGAIN", size: 26, id: "again" };
+    buttons.push(again);
+    drawButton(again);
+    setCredits(true);
+  }
+}
+
+/* ----------------------------------------------------------------- loop */
+
+function tick(ts) {
+  requestAnimationFrame(tick);
+  if (!lastTime) lastTime = ts;
+  var dt = Math.min(0.05, (ts - lastTime) / 1000);
+  lastTime = ts;
+  now = ts;
+
+  updateBackground(dt);
+  if (STATE === "opening") updateOpening(dt);
+  else if (STATE === "chase") updateChase(dt);
+  else if (STATE === "ending") updateEnding(dt);
+  else if (STATE === "title") updateScenery(dt, SCROLL_SPEED * 0.5);
+
+  drawFrame();
+}
+
+/* -------------------------------------------------------------- input */
+
+function toLogical(e) {
+  var r = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) / r.width * LOGICAL_W,
+    y: (e.clientY - r.top) / r.height * LOGICAL_H
+  };
+}
+
+function onDown(e) {
+  var p = toLogical(e);
+  pointer.x = p.x; pointer.y = p.y; pointer.active = true;
+
+  for (var i = 0; i < buttons.length; i++) {
+    if (hitButton(buttons[i], p.x, p.y)) {
+      if (buttons[i].id === "play")  { startGame(); return; }
+      if (buttons[i].id === "again") { startGame(); return; }
+      if (buttons[i].id === "a2hshint") { showInstallHelp(); return; }
+    }
+  }
+  // fullscreen is offered on the title, during play and on the ending
+  if (STATE !== "opening" && showFsButton() &&
+      Math.hypot(p.x - fsBtn.x, p.y - fsBtn.y) <= fsBtn.r + 6) {
+    toggleFullscreen();
+    return;
+  }
+  if (STATE === "opening") { beginChase(); return; }
+}
+
+function onMove(e) {
+  var p = toLogical(e);
+  pointer.x = p.x; pointer.y = p.y;
+}
+
+canvas.addEventListener("pointerdown", onDown);
+canvas.addEventListener("pointermove", onMove);
+canvas.addEventListener("pointerup", function () { pointer.active = false; });
+canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+/* ---------------------------------------------------------------- boot */
+
+Promise.all([
+  loadJSON("manifest.json", "__MANIFEST__", "manifest.js"),
+  loadJSON("palette.json",  "__PALETTE__",  "palette.js")
+]).then(function (res) {
+  MAN = res[0]; PAL = res[1];
+  resolvePalette(PAL);
+  return Promise.all(Object.keys(MAN.sheets).map(function (k) {
+    return loadImage(MAN.sheets[k].file).then(function (img) { IMG[k] = img; });
+  }));
+}).then(function () {
+  measureMouthBounce();
+  resetWorld();
+  STATE = "title";
+  return findAudio();
+}).then(function (url) {
+  if (url) {
+    audioEl = new Audio(assetUrl(url));
+    audioEl.loop = true;
+    audioEl.preload = "auto";
+  }
+}).catch(function (err) {
+  STATE = "loading";
+  drawFrame();
+  ctx.setTransform(PIXEL_SCALE, 0, 0, PIXEL_SCALE, 0, 0);
+  label("ASSET LOAD FAILED", LOGICAL_W / 2, LOGICAL_H / 2 - 20, 30, "#FFFFFF");
+  label(String(err.message || err), LOGICAL_W / 2, LOGICAL_H / 2 + 26, 16, "#FFFFFF");
+  console.error(err);
+});
+
+requestAnimationFrame(tick);
+</script>
