@@ -1452,11 +1452,6 @@ function drawFrame() {
     }
     drawFsButton();
 
-    if (!isStandalone() && !fsSupported() && IS_IOS) {
-      var hint = { x: LOGICAL_W / 2, y: 362, w: 330, h: 26, id: "a2hshint" };
-      label("ADD TO HOME SCREEN FOR FULLSCREEN", hint.x, hint.y, 13, C.white);
-      buttons.push(hint);          // tappable, but deliberately not a button
-    }
     return;
   }
 
@@ -1555,7 +1550,6 @@ function onDown(e) {
     if (hitButton(buttons[i], p.x, p.y)) {
       if (buttons[i].id === "play")  { startGame(); return; }
       if (buttons[i].id === "again") { startGame(); return; }
-      if (buttons[i].id === "a2hshint") { showInstallHelp(); return; }
       if (buttons[i].id === "exit")      { exitFullScreen(); return; }
     }
   }
