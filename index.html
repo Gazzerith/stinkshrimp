@@ -156,23 +156,52 @@ function fitStage() {
   var s = Math.min(v.w / LOGICAL_W, v.h / LOGICAL_H);
   stage.style.transform = "translate(-50%,-50%) scale(" + s + ")";
 
-  /* Turning the phone brings Safari's toolbar back, and there is no way to
-     re-hide it without another real scroll. So a rotation to portrait pauses
-     the run outright - otherwise the shrimp takes hits nobody can see - and
-     coming back to landscape waits for a swipe, which both resumes and
-     collapses the toolbar again. */
-  var isPortrait = v.h > v.w;
-  var was = document.body.classList.contains("portrait");
-  document.body.classList.toggle("portrait", isPortrait);
-  if (typeof swipeMode === "undefined" || !swipeMode) return;
+  document.body.classList.toggle("portrait", v.h > v.w);
+  if (typeof checkImmersion === "function") checkImmersion();
+}
 
-  if (isPortrait && !was) {
-    if (STATE === "opening" || STATE === "chase") paused = true;
-    awaitingSwipe = null;
-  } else if (!isPortrait && was) {
-    if (paused) requestSwipe("resume");
-    else if (STATE === "ending") requestSwipe("again");
-    else if (STATE === "title") requestSwipe("start");
+/* Rather than watching for rotation specifically, measure whether we actually
+   have the screen. Anything that shrinks the viewport - the toolbar coming
+   back, a rotation, returning from another app, a system bar - means we are no
+   longer immersed, and the run should not continue unseen.
+
+   The yardstick is self-calibrating: the tallest landscape viewport seen this
+   session is what "immersed" looks like, so it works on any device without
+   hardcoding a single chrome height. Maxima are tracked for landscape only,
+   since portrait dimensions are not comparable. */
+var maxImmersiveH = 0, maxImmersiveW = 0;
+var IMMERSIVE_TOL = 14;        // px of slack, well under any toolbar height
+
+function isImmersive() {
+  var v = viewportSize();
+  if (v.h <= 0 || v.h > v.w) return false;            // portrait never counts
+  return v.h >= maxImmersiveH - IMMERSIVE_TOL &&
+         v.w >= maxImmersiveW - IMMERSIVE_TOL;
+}
+
+function ensureScrollRoom() {
+  var max = document.documentElement.scrollHeight - window.innerHeight;
+  if (window.scrollY + SWIPE_START_PX + 24 > max) window.scrollTo(0, 0);
+}
+
+function checkImmersion() {
+  if (!swipeMode) return;
+  var v = viewportSize();
+  if (v.h > 0 && v.w > v.h) {                          // landscape only
+    if (v.h > maxImmersiveH) maxImmersiveH = v.h;
+    if (v.w > maxImmersiveW) maxImmersiveW = v.w;
+  }
+  var live = (STATE === "opening" || STATE === "chase");
+  if (!isImmersive()) {
+    if (live && !paused) {
+      paused = true;
+      unlockScrollForSwipe();   // they need to be able to swipe again
+      ensureScrollRoom();
+    }
+  } else if (paused) {
+    paused = false;             // back to full size: carry on
+    lockScrollForPlay();
+    lastTime = 0;
   }
 }
 
@@ -240,7 +269,7 @@ function swipeReady() {
    was turned to portrait, and to play again after a run. Each time we wait for
    a fresh downward scroll from wherever the page currently sits, so the
    toolbar never has to be restored in between. */
-var awaitingSwipe = null;     // null | "start" | "resume" | "again"
+var awaitingSwipe = null;     // null | "start" | "again"
 var swipeBaseline = 0;
 
 function requestSwipe(kind) {
@@ -259,11 +288,9 @@ function checkSwipeStart() {
   if (!awaitingSwipe) return;
   if (window.scrollY < swipeBaseline + SWIPE_START_PX) return;
 
-  var kind = awaitingSwipe;
   awaitingSwipe = null;
   lockScrollForPlay();
-  if (kind === "resume") { paused = false; lastTime = 0; }
-  else startGame();
+  startGame();
 }
 
 // Both paths, deliberately. Browsers throttle these independently - Safari can
@@ -1008,14 +1035,14 @@ function drawFish() {
 /* Shown after the phone comes back to landscape mid-run. The swipe that clears
    it is the same swipe that re-collapses Safari's toolbar. */
 function drawResumePrompt() {
-  if (!paused && awaitingSwipe !== "resume") return;
+  if (!paused) return;
   ctx.save();
   ctx.globalAlpha = 0.55;
   ctx.fillStyle = C.ink;
   ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
   ctx.restore();
   label("PAUSED", LOGICAL_W / 2, 158, 40, C.white);
-  label("SWIPE UP TO RESUME", LOGICAL_W / 2,
+  label("SWIPE UP TO CONTINUE", LOGICAL_W / 2,
         222 + Math.sin(now * 0.004) * 4, 28, C.white);
 }
 
@@ -1450,6 +1477,7 @@ function tick(ts) {
   lastTime = ts;
   now = ts;
 
+  checkImmersion();
   checkSwipeStart();
   if (paused) { drawFrame(); return; }   // rotated away: freeze, do not simulate
 
