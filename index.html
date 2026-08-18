@@ -1567,6 +1567,38 @@ function onMove(e) {
   pointer.x = p.x; pointer.y = p.y;
 }
 
+/* Autoplay needs a user gesture, and in swipe mode the run starts from a scroll
+   poll, which is not one - so play() was being rejected and the rejection
+   swallowed, leaving the game silent. The touch that begins the swipe IS a
+   gesture, so the audio element is unlocked there instead. */
+var audioUnlocked = false;
+
+function unlockAudio() {
+  if (!audioEl || audioUnlocked) return;
+  var p = audioEl.play();
+  if (p && p.then) {
+    p.then(function () {
+      audioUnlocked = true;
+      if (STATE === "title") { audioEl.pause(); audioEl.currentTime = 0; }
+    }).catch(function () {});
+  } else {
+    audioUnlocked = true;
+  }
+}
+
+/* And if it still is not running once play has begun, take any later touch as
+   another chance rather than staying silent for the whole run. */
+function nudgeAudio() {
+  if (!audioEl) return;
+  if (STATE !== "title" && STATE !== "loading" && audioEl.paused) {
+    audioEl.play().catch(function () {});
+  }
+}
+
+function onAnyTouch() { unlockAudio(); nudgeAudio(); }
+document.addEventListener("pointerdown", onAnyTouch, true);
+document.addEventListener("touchstart", onAnyTouch, { passive: true, capture: true });
+
 canvas.addEventListener("pointerdown", onDown);
 canvas.addEventListener("pointermove", onMove);
 canvas.addEventListener("pointerup", function () { pointer.active = false; });
