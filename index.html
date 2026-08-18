@@ -1506,7 +1506,7 @@ function drawFrame() {
       drawButton(again);
     }
     if (canExitFullScreen()) {
-      var exit = { x: 74, y: 30, w: 96, h: 38, text: "EXIT", size: 19, id: "exit" };
+      var exit = { x: LOGICAL_W - 70, y: LOGICAL_H - 34, w: 96, h: 38, text: "EXIT", size: 19, id: "exit" };
       buttons.push(exit);
       drawButton(exit);
     }
