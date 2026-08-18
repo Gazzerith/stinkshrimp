@@ -674,7 +674,7 @@ function drawButton(b) {
   ctx.closePath();
   ctx.fillStyle = C.white;
   ctx.fill();
-  ctx.lineWidth = b.stroke || 5;
+  ctx.lineWidth = 5;
   ctx.strokeStyle = C.ink;
   ctx.stroke();
   ctx.restore();
@@ -1506,10 +1506,10 @@ function drawFrame() {
       drawButton(again);
     }
     if (canExitFullScreen()) {
-      var exit = { x: LOGICAL_W - 62, y: 364, w: 76, h: 32,
-                   text: "EXIT", size: 16, stroke: 2.5, id: "exit" };
-      buttons.push(exit);
-      drawButton(exit);
+      // plain text, not a pill: it should sit quietly behind the credit links
+      var exit = { x: LOGICAL_W - 58, y: 364, w: 84, h: 34, id: "exit" };
+      buttons.push(exit);          // tap area stays generous
+      label("EXIT", exit.x, exit.y, 18, C.white);
     }
     setCredits(true);
   }
