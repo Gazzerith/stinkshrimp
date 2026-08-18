@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>Stink Shrimp</title>
@@ -23,6 +24,22 @@
     transform-origin: 50% 50%;
     width: 844px; height: 390px;
   }
+
+  /* Swipe-to-start: iPhone Safari only collapses its toolbar for a real user
+     scroll, so the page has to be genuinely scrollable for the gesture to
+     count. The stage goes fixed so it stays put while the document moves
+     under it, and #scrollpad supplies the scrollable height. */
+  html.swipe, body.swipe {
+    height: auto; min-height: 100%; overflow-y: auto;
+    touch-action: pan-y; overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  body.swipe #stage { position: fixed; }
+  #scrollpad { display: none; }
+  body.swipe #scrollpad { display: block; width: 1px; }
+  /* Once play starts the document stays scrollable - so the collapsed toolbar
+     is not restored - but touches belong to the game, never to scrolling. */
+  body.swipe.playing, html.swipe.playing { touch-action: none; }
   #game { display: block; width: 844px; height: 390px; }
   #credits {
     position: absolute; left: 0; right: 0; bottom: 10px;
@@ -93,6 +110,7 @@
     </div>
   </div>
 </div>
+<div id="scrollpad"></div>
 <div id="rotate">ROTATE YOUR PHONE</div>
 <div id="a2hs"><div class="box">
   <h2>Want it fullscreen?</h2>
@@ -133,6 +151,7 @@ function viewportSize() {
 }
 
 function fitStage() {
+  if (typeof swipeMode !== "undefined" && swipeMode) sizeScrollPad();
   var v = viewportSize();
   var s = Math.min(v.w / LOGICAL_W, v.h / LOGICAL_H);
   stage.style.transform = "translate(-50%,-50%) scale(" + s + ")";
@@ -149,6 +168,78 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener("scroll", fitStage);
 }
 fitStage();
+
+/* ------------------------------------------------------ swipe to start ---
+
+   iPhone Safari collapses its toolbar only for a genuine user scroll - a
+   programmatic scrollTo does not count, by design. So instead of faking it,
+   the title screen is made scrollable and the swipe that hides the toolbar is
+   the same swipe that starts the game.
+
+   Once play begins the document stays scrollable (removing the scroll would
+   let Safari restore the toolbar) but touch-action goes to none, so every
+   touch belongs to the shrimp and nothing scrolls the page again.
+
+   Only used where it can help: iPhone-class Safari, not already installed,
+   and no real Fullscreen API. Override for testing with ?swipe=0 or ?swipe=1.
+   Tapping PLAY always works too - nobody can get stuck. */
+
+var SWIPE_START_PX = 24;          // scrolled this far = start
+var SCROLLPAD_EXTRA = 220;        // px of scrollable slack beyond the viewport
+var swipeMode = false;
+
+function swipeParam() {
+  var m = /[?&]swipe=([01])/.exec(location.search);
+  return m ? m[1] === "1" : null;
+}
+
+function wantSwipeMode() {
+  var forced = swipeParam();
+  if (forced !== null) return forced;
+  return IS_IOS && !isStandalone() && !fsSupported();
+}
+
+function sizeScrollPad() {
+  var pad = document.getElementById("scrollpad");
+  // guard the transient zero-height viewport some browsers report on load
+  var h = Math.max(viewportSize().h, window.innerHeight, 320);
+  if (pad) pad.style.height = (h + SCROLLPAD_EXTRA) + "px";
+}
+
+/* Polled from the render loop rather than driven by a scroll event: scroll
+   events are throttled, coalesced or suppressed depending on the browser, and
+   missing the start would strand the player. Reading scrollY costs nothing. */
+function checkSwipeStart() {
+  if (!swipeMode || STATE !== "title") return;
+  if (window.scrollY >= SWIPE_START_PX) startGame();
+}
+
+// Both paths, deliberately. Browsers throttle these independently - Safari can
+// coalesce scroll events, and rAF stalls in background or automated contexts.
+// Either one alone can miss the gesture; together they will not.
+window.addEventListener("scroll", checkSwipeStart, { passive: true });
+
+function enterSwipeMode() {
+  if (swipeMode) return;
+  swipeMode = true;
+  document.documentElement.classList.add("swipe");
+  document.body.classList.add("swipe");
+  sizeScrollPad();
+  fitStage();
+}
+
+/* Called when the game starts. Keeps the page scrollable so the collapsed
+   toolbar stays collapsed, but hands every touch to the game. */
+function lockScrollForPlay() {
+  if (!swipeMode) return;
+  document.documentElement.classList.add("playing");
+  document.body.classList.add("playing");
+}
+
+// belt and braces: touch-action alone has been unreliable across iOS versions
+canvas.addEventListener("touchmove", function (e) {
+  if (swipeMode && STATE !== "title") e.preventDefault();
+}, { passive: false });
 
 /* ------------------------------------------------------- tuning constants */
 /* All of these are meant to be hand-tuned. */
@@ -1055,6 +1146,7 @@ function setCredits(on) {
 }
 
 function startGame() {
+  lockScrollForPlay();
   setCredits(false);
   resetWorld();
   STATE = "opening";
@@ -1210,9 +1302,13 @@ function drawFrame() {
     buttons.push(play);
     drawButton(play);
     drawFsButton();
+    if (swipeMode) {
+      label("\u25B2  SWIPE UP TO START", LOGICAL_W / 2, 344, 17, C.white);
+    }
     if (!isStandalone() && !fsSupported() && IS_IOS) {
-      var hint = { x: LOGICAL_W / 2, y: 352, w: 330, h: 28, id: "a2hshint" };
-      label("ADD TO HOME SCREEN FOR FULLSCREEN", hint.x, hint.y, 14, C.white);
+      var hy = swipeMode ? 372 : 352;
+      var hint = { x: LOGICAL_W / 2, y: hy, w: 330, h: 26, id: "a2hshint" };
+      label("ADD TO HOME SCREEN FOR FULLSCREEN", hint.x, hint.y, 13, C.white);
       buttons.push(hint);          // tappable, but deliberately not a button
     }
     return;
@@ -1266,6 +1362,7 @@ function tick(ts) {
   lastTime = ts;
   now = ts;
 
+  checkSwipeStart();
   updateBackground(dt);
   if (STATE === "opening") updateOpening(dt);
   else if (STATE === "chase") updateChase(dt);
@@ -1330,6 +1427,7 @@ Promise.all([
   measureMouthBounce();
   resetWorld();
   STATE = "title";
+  if (wantSwipeMode()) enterSwipeMode();
   return findAudio();
 }).then(function (url) {
   if (url) {
