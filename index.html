@@ -194,25 +194,110 @@ function ensureScrollRoom() {
   }
 }
 
+/* Experiment, off by default. Mode 1 is the shipped behaviour, untouched.
+   Mode 2 tests the theory that the high-water mark gets poisoned by a frame
+   caught mid-animation: browser chrome does not vanish instantly, the viewport
+   sweeps up to it and can overshoot where it settles. One tall sample then
+   becomes a benchmark the browser never returns to, and the game stays paused
+   for good. Chrome on iPhone has two bars that collapse independently, so it
+   produces far more of these in-between heights than Safari.
+
+   Mode 2 changes three things:
+     - only samples that have held still for a moment count toward the mark
+     - the mark can never exceed the physical screen, so an overshoot is capped
+     - separate pause and resume thresholds, so a borderline reading cannot
+       flip the state back and forth
+   Select with ?imm=2, and watch the numbers with ?debug=1. */
+var IMM_MODE = (function () {
+  var m = /[?&]imm=([12])/.exec(location.search);
+  return m ? +m[1] : 1;
+})();
+var IMM_PAUSE_TOL = 40;      // must drop this far below the mark to count as lost
+var IMM_RESUME_TOL = 20;     // must come back this close to count as regained
+var IMM_SETTLE_MS = 220;     // how long a height must hold before it is trusted
+var settleH = 0, settleSince = 0, settledH = 0;
+
+/* The tallest a landscape viewport can physically be is the short side of the
+   screen; anything above that is an artefact and must not set the mark. */
+function physicalCap() {
+  if (!window.screen || !screen.width || !screen.height) return Infinity;
+  return Math.min(screen.width, screen.height);
+}
+
 function checkImmersion() {
   if (!swipeMode) return;
   var v = viewportSize();
-  if (v.h > 0 && v.w > v.h) {                          // landscape only
-    if (v.h > maxImmersiveH) maxImmersiveH = v.h;
-    if (v.w > maxImmersiveW) maxImmersiveW = v.w;
+  var landscape = v.h > 0 && v.w > v.h;
+
+  if (IMM_MODE === 1) {
+    if (landscape) {
+      if (v.h > maxImmersiveH) maxImmersiveH = v.h;
+      if (v.w > maxImmersiveW) maxImmersiveW = v.w;
+    }
+  } else {
+    // only trust a height that has stopped moving
+    if (Math.abs(v.h - settleH) > 2) { settleH = v.h; settleSince = now; }
+    else if (now - settleSince >= IMM_SETTLE_MS) { settledH = v.h; }
+    if (landscape && settledH > 0) {
+      var capped = Math.min(settledH, physicalCap());
+      if (capped > maxImmersiveH) maxImmersiveH = capped;
+      if (v.w > maxImmersiveW) maxImmersiveW = v.w;
+    }
   }
+
   var live = (STATE === "opening" || STATE === "chase");
-  if (!isImmersive()) {
+  var lost, regained;
+  if (IMM_MODE === 1) {
+    lost = !isImmersive();
+    regained = isImmersive();
+  } else {
+    lost = !landscape || v.h < maxImmersiveH - IMM_PAUSE_TOL;
+    regained = landscape && v.h >= maxImmersiveH - IMM_RESUME_TOL;
+  }
+
+  if (lost) {
     if (live && !paused) {
       paused = true;
       unlockScrollForSwipe();   // they need to be able to swipe again
       ensureScrollRoom();
     }
-  } else if (paused) {
+  } else if (paused && regained) {
     paused = false;             // back to full size: carry on
     lockScrollForPlay();
     lastTime = 0;
   }
+}
+
+/* Live numbers, so the theory can be checked on the actual phone rather than
+   reasoned about. ?debug=1 */
+var DEBUG_HUD = /[?&]debug=1/.test(location.search);
+
+function drawDebugHud() {
+  if (!DEBUG_HUD) return;
+  var v = viewportSize();
+  var lines = [
+    "mode " + IMM_MODE + "   swipe " + (swipeMode ? "on" : "off"),
+    "vh " + Math.round(v.h) + "  max " + Math.round(maxImmersiveH) +
+      "  gap " + Math.round(maxImmersiveH - v.h),
+    "settled " + Math.round(settledH) + "  cap " + Math.round(physicalCap()),
+    "immersive " + (IMM_MODE === 1 ? isImmersive()
+                    : (v.h >= maxImmersiveH - IMM_RESUME_TOL)) +
+      "   paused " + paused,
+    "scrollY " + Math.round(window.scrollY) + " / " +
+      Math.round(document.documentElement.scrollHeight - window.innerHeight),
+    "state " + STATE + "  await " + awaitingSwipe
+  ];
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(6, 6, 250, lines.length * 15 + 10);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = C.white;
+  ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], 14, 13 + i * 15);
+  ctx.restore();
 }
 
 window.addEventListener("resize", fitStage);
@@ -1512,6 +1597,12 @@ function drawFrame() {
 
 /* ----------------------------------------------------------------- loop */
 
+var drawFrameBase = null;
+function drawFrameWithHud() {
+  drawFrameBase();
+  drawDebugHud();
+}
+
 function tick(ts) {
   requestAnimationFrame(tick);
   if (!lastTime) lastTime = ts;
@@ -1603,6 +1694,9 @@ Promise.all([
   label(String(err.message || err), LOGICAL_W / 2, LOGICAL_H / 2 + 26, 16, "#FFFFFF");
   console.error(err);
 });
+
+drawFrameBase = drawFrame;
+if (DEBUG_HUD) drawFrame = drawFrameWithHud;
 
 requestAnimationFrame(tick);
 </script>
