@@ -246,6 +246,7 @@ var SCROLLPAD_EXTRA = 1600;       // px of scrollable slack beyond the viewport
 var scrollPadExtra = SCROLLPAD_EXTRA;   // grows rather than ever scrolling back
 var swipeMode = false;
 var paused = false;
+var exitedFullScreen = false;
 
 function swipeParam() {
   var m = /[?&]swipe=([01])/.exec(location.search);
@@ -1125,6 +1126,26 @@ function showInstallHelp() {
   document.body.classList.add("a2hs");
 }
 
+/* Give the screen back. On desktop that means leaving real fullscreen; on
+   iPhone it means scrolling to the top, which is the only thing that makes
+   Safari put its toolbar back. Scrolling up is normally the bug we avoid -
+   here it is the whole point, and it only happens when asked. */
+function canExitFullScreen() {
+  return !!fsElement() || (swipeMode && window.scrollY > 0);
+}
+
+function exitFullScreen() {
+  exitedFullScreen = true;
+  awaitingSwipe = null;          // a stray scroll must not start a new run
+  if (fsElement()) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  }
+  if (swipeMode) {
+    unlockScrollForSwipe();
+    window.scrollTo(0, 0);       // brings Safari's toolbar back
+  }
+}
+
 function toggleFullscreen() {
   if (!fsSupported()) {           // iPhone Safari - offer Add to Home Screen
     showInstallHelp();
@@ -1262,6 +1283,7 @@ function setCredits(on) {
 
 function startGame() {
   paused = false;
+  exitedFullScreen = false;
   awaitingSwipe = null;
   lockScrollForPlay();
   setCredits(false);
@@ -1472,7 +1494,9 @@ function drawFrame() {
   if (endingT > 1400) {
     var line = endingGood ? "SHE DEFLATED FOR YOU" : "THE FROG TOOK HER";
     label(line, LOGICAL_W / 2, 62, 42, C.white);
-    if (swipeReady()) {
+    /* Once they have chosen to drop out of full screen, a swipe must not yank
+       them straight into a new run - they get a plain button instead. */
+    if (swipeReady() && !exitedFullScreen) {
       if (awaitingSwipe === null) requestSwipe("again");
       label("SWIPE UP TO PLAY AGAIN", LOGICAL_W / 2,
             130 + Math.sin(now * 0.004) * 4, 26, C.white);
@@ -1480,6 +1504,11 @@ function drawFrame() {
       var again = { x: LOGICAL_W / 2, y: 126, w: 180, h: 54, text: "AGAIN", size: 26, id: "again" };
       buttons.push(again);
       drawButton(again);
+    }
+    if (canExitFullScreen()) {
+      var exit = { x: 74, y: 30, w: 96, h: 38, text: "EXIT", size: 19, id: "exit" };
+      buttons.push(exit);
+      drawButton(exit);
     }
     setCredits(true);
   }
@@ -1526,6 +1555,7 @@ function onDown(e) {
       if (buttons[i].id === "play")  { startGame(); return; }
       if (buttons[i].id === "again") { startGame(); return; }
       if (buttons[i].id === "a2hshint") { showInstallHelp(); return; }
+      if (buttons[i].id === "exit")      { exitFullScreen(); return; }
     }
   }
   // fullscreen is offered on the title, during play and on the ending
