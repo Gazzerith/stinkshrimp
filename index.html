@@ -179,9 +179,16 @@ function isImmersive() {
          v.w >= maxImmersiveW - IMMERSIVE_TOL;
 }
 
+/* Every swipe leaves the page a little further down. When the slack runs low
+   we lengthen the page rather than scrolling back to the top - scrolling up is
+   the one thing that makes Safari put its toolbar back, which would drop the
+   game out of full screen exactly when the player is mid-run. */
 function ensureScrollRoom() {
   var max = document.documentElement.scrollHeight - window.innerHeight;
-  if (window.scrollY + SWIPE_START_PX + 24 > max) window.scrollTo(0, 0);
+  if (window.scrollY + SWIPE_START_PX + 60 > max) {
+    scrollPadExtra += 1600;
+    sizeScrollPad();
+  }
 }
 
 function checkImmersion() {
@@ -232,7 +239,8 @@ fitStage();
    Tapping PLAY always works too - nobody can get stuck. */
 
 var SWIPE_START_PX = 24;          // scrolled this far = start
-var SCROLLPAD_EXTRA = 220;        // px of scrollable slack beyond the viewport
+var SCROLLPAD_EXTRA = 1600;       // px of scrollable slack beyond the viewport
+var scrollPadExtra = SCROLLPAD_EXTRA;   // grows rather than ever scrolling back
 var swipeMode = false;
 var paused = false;
 
@@ -251,7 +259,7 @@ function sizeScrollPad() {
   var pad = document.getElementById("scrollpad");
   // guard the transient zero-height viewport some browsers report on load
   var h = Math.max(viewportSize().h, window.innerHeight, 320);
-  if (pad) pad.style.height = (h + SCROLLPAD_EXTRA) + "px";
+  if (pad) pad.style.height = (h + scrollPadExtra) + "px";
 }
 
 /* Only trust swipe mode if the document genuinely scrolls. If it does not, fall
@@ -276,9 +284,7 @@ function requestSwipe(kind) {
   if (!swipeMode) return;
   awaitingSwipe = kind;
   unlockScrollForSwipe();
-  // make sure there is still room below to scroll into
-  var max = document.documentElement.scrollHeight - window.innerHeight;
-  if (window.scrollY + SWIPE_START_PX + 24 > max) window.scrollTo(0, 0);
+  ensureScrollRoom();          // lengthens the page; never scrolls back up
   swipeBaseline = window.scrollY;
 }
 
@@ -1263,6 +1269,7 @@ function beginChase() {
 }
 
 function endRun(forceBad) {
+  paused = false;          // the run is over; never strand it behind PAUSED
   STATE = "ending";
   endingT = 0;
   // every heart he let past, plus every hit of drool. Over the allowance and
