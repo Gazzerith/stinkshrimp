@@ -674,7 +674,7 @@ function drawButton(b) {
   ctx.closePath();
   ctx.fillStyle = C.white;
   ctx.fill();
-  ctx.lineWidth = 5;
+  ctx.lineWidth = b.stroke || 5;
   ctx.strokeStyle = C.ink;
   ctx.stroke();
   ctx.restore();
@@ -1506,7 +1506,8 @@ function drawFrame() {
       drawButton(again);
     }
     if (canExitFullScreen()) {
-      var exit = { x: LOGICAL_W - 70, y: LOGICAL_H - 34, w: 96, h: 38, text: "EXIT", size: 19, id: "exit" };
+      var exit = { x: LOGICAL_W - 62, y: 364, w: 76, h: 32,
+                   text: "EXIT", size: 16, stroke: 2.5, id: "exit" };
       buttons.push(exit);
       drawButton(exit);
     }
