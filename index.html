@@ -155,7 +155,25 @@ function fitStage() {
   var v = viewportSize();
   var s = Math.min(v.w / LOGICAL_W, v.h / LOGICAL_H);
   stage.style.transform = "translate(-50%,-50%) scale(" + s + ")";
-  document.body.classList.toggle("portrait", v.h > v.w);
+
+  /* Turning the phone brings Safari's toolbar back, and there is no way to
+     re-hide it without another real scroll. So a rotation to portrait pauses
+     the run outright - otherwise the shrimp takes hits nobody can see - and
+     coming back to landscape waits for a swipe, which both resumes and
+     collapses the toolbar again. */
+  var isPortrait = v.h > v.w;
+  var was = document.body.classList.contains("portrait");
+  document.body.classList.toggle("portrait", isPortrait);
+  if (typeof swipeMode === "undefined" || !swipeMode) return;
+
+  if (isPortrait && !was) {
+    if (STATE === "opening" || STATE === "chase") paused = true;
+    awaitingSwipe = null;
+  } else if (!isPortrait && was) {
+    if (paused) requestSwipe("resume");
+    else if (STATE === "ending") requestSwipe("again");
+    else if (STATE === "title") requestSwipe("start");
+  }
 }
 
 window.addEventListener("resize", fitStage);
@@ -187,6 +205,7 @@ fitStage();
 var SWIPE_START_PX = 24;          // scrolled this far = start
 var SCROLLPAD_EXTRA = 220;        // px of scrollable slack beyond the viewport
 var swipeMode = false;
+var paused = false;
 
 function swipeParam() {
   var m = /[?&]swipe=([01])/.exec(location.search);
@@ -217,9 +236,34 @@ function swipeReady() {
 /* Polled from the render loop rather than driven by a scroll event: scroll
    events are throttled, coalesced or suppressed depending on the browser, and
    missing the start would strand the player. Reading scrollY costs nothing. */
+/* A swipe is required at three moments: to start, to resume after the phone
+   was turned to portrait, and to play again after a run. Each time we wait for
+   a fresh downward scroll from wherever the page currently sits, so the
+   toolbar never has to be restored in between. */
+var awaitingSwipe = null;     // null | "start" | "resume" | "again"
+var swipeBaseline = 0;
+
+function requestSwipe(kind) {
+  if (!swipeMode) return;
+  awaitingSwipe = kind;
+  unlockScrollForSwipe();
+  // make sure there is still room below to scroll into
+  var max = document.documentElement.scrollHeight - window.innerHeight;
+  if (window.scrollY + SWIPE_START_PX + 24 > max) window.scrollTo(0, 0);
+  swipeBaseline = window.scrollY;
+}
+
 function checkSwipeStart() {
-  if (!swipeMode || STATE !== "title") return;
-  if (window.scrollY >= SWIPE_START_PX) startGame();
+  if (!swipeMode) return;
+  if (STATE === "title" && awaitingSwipe === null) requestSwipe("start");
+  if (!awaitingSwipe) return;
+  if (window.scrollY < swipeBaseline + SWIPE_START_PX) return;
+
+  var kind = awaitingSwipe;
+  awaitingSwipe = null;
+  lockScrollForPlay();
+  if (kind === "resume") { paused = false; lastTime = 0; }
+  else startGame();
 }
 
 // Both paths, deliberately. Browsers throttle these independently - Safari can
@@ -242,6 +286,12 @@ function lockScrollForPlay() {
   if (!swipeMode) return;
   document.documentElement.classList.add("playing");
   document.body.classList.add("playing");
+}
+
+function unlockScrollForSwipe() {
+  if (!swipeMode) return;
+  document.documentElement.classList.remove("playing");
+  document.body.classList.remove("playing");
 }
 
 // belt and braces: touch-action alone has been unreliable across iOS versions
@@ -955,6 +1005,20 @@ function drawFish() {
 
 /* ------------------------------------------------------------------- HUD */
 
+/* Shown after the phone comes back to landscape mid-run. The swipe that clears
+   it is the same swipe that re-collapses Safari's toolbar. */
+function drawResumePrompt() {
+  if (!paused && awaitingSwipe !== "resume") return;
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+  ctx.restore();
+  label("PAUSED", LOGICAL_W / 2, 158, 40, C.white);
+  label("SWIPE UP TO RESUME", LOGICAL_W / 2,
+        222 + Math.sin(now * 0.004) * 4, 28, C.white);
+}
+
 function drawHUD() {
   var x = 20, y = 22, w = 430, h = 16;
   ctx.save();
@@ -1154,6 +1218,8 @@ function setCredits(on) {
 }
 
 function startGame() {
+  paused = false;
+  awaitingSwipe = null;
   lockScrollForPlay();
   setCredits(false);
   resetWorld();
@@ -1311,9 +1377,8 @@ function drawFrame() {
        game without a scroll, so Safari never collapses its toolbar and the
        whole point is lost. Everywhere else, the button. */
     if (swipeReady()) {
-      var bob = Math.sin(now * 0.004) * 5;
-      label("\u25B2", LOGICAL_W / 2, 284 + bob, 24, C.white);
-      label("SWIPE UP TO PLAY", LOGICAL_W / 2, 318 + bob * 0.5, 30, C.white);
+      label("SWIPE UP TO PLAY", LOGICAL_W / 2,
+            306 + Math.sin(now * 0.004) * 4, 30, C.white);
     } else {
       var play = { x: LOGICAL_W / 2, y: 300, w: 200, h: 62, text: "PLAY", size: 30, id: "play" };
       buttons.push(play);
@@ -1338,7 +1403,8 @@ function drawFrame() {
     if (!o.gone) drawSheet("worry_fish_feminine", now, o.fishX, o.fishY, {});
     if (o.show) drawTongueFront(o.tipX, o.fishY, o.wrapped);
     drawSheet("shrimp", now, 340, 210, { flip: true });
-    label("TAP TO SKIP", LOGICAL_W / 2, LOGICAL_H - 26, 18, C.white);
+    if (!paused) label("TAP TO SKIP", LOGICAL_W / 2, LOGICAL_H - 26, 18, C.white);
+    drawResumePrompt();
     return;
   }
 
@@ -1353,6 +1419,7 @@ function drawFrame() {
 
   if (STATE === "chase") {
     drawHUD();
+    drawResumePrompt();
     return;
   }
 
@@ -1361,9 +1428,15 @@ function drawFrame() {
   if (endingT > 1400) {
     var line = endingGood ? "SHE DEFLATED FOR YOU" : "THE FROG TOOK HER";
     label(line, LOGICAL_W / 2, 62, 42, C.white);
-    var again = { x: LOGICAL_W / 2, y: 126, w: 180, h: 54, text: "AGAIN", size: 26, id: "again" };
-    buttons.push(again);
-    drawButton(again);
+    if (swipeReady()) {
+      if (awaitingSwipe === null) requestSwipe("again");
+      label("SWIPE UP TO PLAY AGAIN", LOGICAL_W / 2,
+            130 + Math.sin(now * 0.004) * 4, 26, C.white);
+    } else {
+      var again = { x: LOGICAL_W / 2, y: 126, w: 180, h: 54, text: "AGAIN", size: 26, id: "again" };
+      buttons.push(again);
+      drawButton(again);
+    }
     setCredits(true);
   }
 }
@@ -1378,6 +1451,8 @@ function tick(ts) {
   now = ts;
 
   checkSwipeStart();
+  if (paused) { drawFrame(); return; }   // rotated away: freeze, do not simulate
+
   updateBackground(dt);
   if (STATE === "opening") updateOpening(dt);
   else if (STATE === "chase") updateChase(dt);
