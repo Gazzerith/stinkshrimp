@@ -40,6 +40,9 @@
   /* Once play starts the document stays scrollable - so the collapsed toolbar
      is not restored - but touches belong to the game, never to scrolling. */
   body.swipe.playing, html.swipe.playing { touch-action: none; }
+  /* the canvas covers the screen, so it must scroll too while we await a swipe */
+  body.swipe #game { touch-action: pan-y; }
+  body.swipe.playing #game { touch-action: none; }
   #game { display: block; width: 844px; height: 390px; }
   #credits {
     position: absolute; left: 0; right: 0; bottom: 10px;
@@ -327,9 +330,16 @@ function unlockScrollForSwipe() {
   document.body.classList.remove("playing");
 }
 
-// belt and braces: touch-action alone has been unreliable across iOS versions
+/* Belt and braces alongside touch-action, which has been unreliable across iOS
+   versions. Only swallow the gesture while the game is actually running - when
+   it is paused or waiting for a swipe, the canvas has to let the page scroll,
+   otherwise the only place the swipe works is the letterbox bars. */
+function gameOwnsTouch() {
+  return swipeMode && !paused && !awaitingSwipe &&
+         (STATE === "opening" || STATE === "chase");
+}
 canvas.addEventListener("touchmove", function (e) {
-  if (swipeMode && STATE !== "title") e.preventDefault();
+  if (gameOwnsTouch()) e.preventDefault();
 }, { passive: false });
 
 /* ------------------------------------------------------- tuning constants */
