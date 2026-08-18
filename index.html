@@ -206,6 +206,14 @@ function sizeScrollPad() {
   if (pad) pad.style.height = (h + SCROLLPAD_EXTRA) + "px";
 }
 
+/* Only trust swipe mode if the document genuinely scrolls. If it does not, fall
+   back to the PLAY button rather than stranding the player with an instruction
+   that cannot be followed. */
+function swipeReady() {
+  if (!swipeMode) return false;
+  return (document.documentElement.scrollHeight - window.innerHeight) > 8;
+}
+
 /* Polled from the render loop rather than driven by a scroll event: scroll
    events are throttled, coalesced or suppressed depending on the browser, and
    missing the start would strand the player. Reading scrollY costs nothing. */
@@ -1298,16 +1306,23 @@ function drawFrame() {
               { flip: true, scale: TITLE_FROG.scale });
     drawSeaweed(now);
     label("STINK SHRIMP", LOGICAL_W / 2, 96, 62, C.white);
-    var play = { x: LOGICAL_W / 2, y: 300, w: 200, h: 62, text: "PLAY", size: 30, id: "play" };
-    buttons.push(play);
-    drawButton(play);
-    drawFsButton();
-    if (swipeMode) {
-      label("\u25B2  SWIPE UP TO START", LOGICAL_W / 2, 344, 17, C.white);
+
+    /* Where the swipe works it is the only way in: tapping a button starts the
+       game without a scroll, so Safari never collapses its toolbar and the
+       whole point is lost. Everywhere else, the button. */
+    if (swipeReady()) {
+      var bob = Math.sin(now * 0.004) * 5;
+      label("\u25B2", LOGICAL_W / 2, 284 + bob, 24, C.white);
+      label("SWIPE UP TO PLAY", LOGICAL_W / 2, 318 + bob * 0.5, 30, C.white);
+    } else {
+      var play = { x: LOGICAL_W / 2, y: 300, w: 200, h: 62, text: "PLAY", size: 30, id: "play" };
+      buttons.push(play);
+      drawButton(play);
     }
+    drawFsButton();
+
     if (!isStandalone() && !fsSupported() && IS_IOS) {
-      var hy = swipeMode ? 372 : 352;
-      var hint = { x: LOGICAL_W / 2, y: hy, w: 330, h: 26, id: "a2hshint" };
+      var hint = { x: LOGICAL_W / 2, y: 362, w: 330, h: 26, id: "a2hshint" };
       label("ADD TO HOME SCREEN FOR FULLSCREEN", hint.x, hint.y, 13, C.white);
       buttons.push(hint);          // tappable, but deliberately not a button
     }
