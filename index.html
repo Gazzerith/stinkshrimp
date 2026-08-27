@@ -369,7 +369,7 @@ var INVULN_MS       = 700;
 var SURPRISED_MS    = 400;            // fish reaction on heart pickup
 var BG_FADE_MS      = 400;
 var OPENING_MS      = 3000;
-var LOSE_LINE_SWAP_MS = 3000;   // beat before the losing line becomes the track title
+var LOSE_LINE_HOLD_MS = 1000;   // how long UNFORTUNATELY holds before the real line
 var SCROLL_SPEED    = 130;            // world scroll, logical px/sec
 var BUBBLE_OUTLINE  = 2.25;           // 75% of the original 3px stroke
 // How closely the smile tracks his face as his head bobs. Flipping the mouth
@@ -1488,14 +1488,15 @@ function drawFrame() {
   // ending
   drawFsButton();
   if (endingT > 1400) {
-    /* The losing line hands over to the track title after a beat. Timed from
-       when the text first appears, not from the end of the run. */
+    /* The losing screen opens on UNFORTUNATELY, then settles on what actually
+       happened. Timed from when the text first appears, not from the end of
+       the run, so the beat is the same however the run finished. */
     var line;
     if (endingGood) {
       line = "SHE DEFLATED FOR YOU";
     } else {
-      line = (endingT > 1400 + LOSE_LINE_SWAP_MS) ? "IT'S UNFORTUNATE"
-                                                  : "THE TOAD TOOK HER";
+      line = (endingT > 1400 + LOSE_LINE_HOLD_MS) ? "THE TOAD TOOK HER"
+                                                  : "UNFORTUNATELY";
     }
     label(line, LOGICAL_W / 2, 62, 42, C.white);
     /* Once they have chosen to drop out of full screen, a swipe must not yank
